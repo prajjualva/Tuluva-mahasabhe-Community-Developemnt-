@@ -33,6 +33,18 @@ async function main() {
     data: permissionRows.map((p) => ({ roleId: adminRole.id, permissionId: p.id })),
     skipDuplicates: true,
   });
+  await prisma.rolePermission.createMany({
+    data: permissionRows
+      .filter((permission) => permission.code.startsWith("member:"))
+      .map((permission) => ({ roleId: memberRole.id, permissionId: permission.id })),
+    skipDuplicates: true,
+  });
+  await prisma.rolePermission.createMany({
+    data: permissionRows
+      .filter((permission) => permission.code.startsWith("coordinator:"))
+      .map((permission) => ({ roleId: coordinatorRole.id, permissionId: permission.id })),
+    skipDuplicates: true,
+  });
   const admin = await prisma.user.upsert({
     where: { email: "admin@dev.local" },
     update: {},
@@ -61,6 +73,28 @@ async function main() {
     update: {},
     create: { memberId: coordinatorMember.id, referralCode: "TULUVA01" },
   });
+  const memberUser = await prisma.user.upsert({
+    where: { email: "member@dev.local" },
+    update: {},
+    create: { email: "member@dev.local", mobile: "+919000000003", passwordHash },
+  });
+  const coordinator = await prisma.coordinator.findUniqueOrThrow({
+    where: { memberId: coordinatorMember.id },
+  });
+  await prisma.member.upsert({
+    where: { userId: memberUser.id },
+    update: { coordinatorId: coordinator.id },
+    create: {
+      userId: memberUser.id,
+      coordinatorId: coordinator.id,
+      fullName: "Development Member",
+      address: "Mangaluru, Karnataka",
+    },
+  });
+  await prisma.userRole.createMany({
+    data: [{ userId: memberUser.id, roleId: memberRole.id }],
+    skipDuplicates: true,
+  });
   await prisma.userRole.createMany({
     data: [
       { userId: coordinatorUser.id, roleId: memberRole.id },
@@ -83,7 +117,5 @@ async function main() {
     });
   }
   console.log("Development seed complete. Admin: admin@dev.local / DevelopmentOnly-ChangeMe1!");
-  void memberRole;
-  void coordinatorRole;
 }
 main().finally(() => prisma.$disconnect());

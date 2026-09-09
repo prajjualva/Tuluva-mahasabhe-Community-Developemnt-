@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignOutButton } from "./sign-out-button";
 const navigation = [
   "Dashboard",
   "Profile",
@@ -31,6 +32,7 @@ export default function MemberLayout({ children }: Readonly<{ children: React.Re
             </Link>
           ))}
         </nav>
+        <SignOutButton />
       </aside>
       <section>{children}</section>
     </div>

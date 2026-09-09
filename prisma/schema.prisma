@@ -178,6 +178,16 @@ model PasswordReset {
   @@map("password_resets")
 }
 
+model LoginThrottle {
+  key             String    @id
+  failures        Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@map("login_throttles")
+}
+
 model Role {
   id          String           @id @default(uuid()) @db.Uuid
   code        String           @unique
@@ -240,6 +250,7 @@ model Member {
   payments           Payment[]
   wallet             Wallet?
   contributions      Contribution[]
+  cashCollections    CashCollection[]
   transfers          CoordinatorTransfer[]
   deathCases         DeathCase[]            @relation("SubjectMember")
   referral           Referral?
@@ -328,11 +339,15 @@ model MembershipPeriod {
 
 model CommunitySupportPlan {
   id            String     @id @default(uuid()) @db.Uuid
+  externalId    String     @unique @default(uuid()) @db.Uuid
   memberId      String     @db.Uuid
   status        PlanStatus @default(NOT_REGISTERED)
   activatedAt   DateTime?
   waitingEndsAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   member        Member     @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  dues          Due[]
 
   @@index([memberId, status])
   @@map("community_support_plans")
@@ -414,10 +429,14 @@ model ContributionEvent {
   externalId    String          @unique @default(uuid()) @db.Uuid
   deathCaseId   String          @unique @db.Uuid
   publishedAt   DateTime?
+  // This is the historical cutoff for contribution obligations. A member who
+  // joined after this instant must never receive a due for this event.
+  createdAt     DateTime        @default(now())
   status        DeathCaseStatus @default(APPROVED)
   deathCase     DeathCase       @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
   contributions Contribution[]
 
+  @@index([status, publishedAt])
   @@map("contribution_events")
 }
 
@@ -435,18 +454,23 @@ model Contribution {
 }
 
 model Due {
-  id          String    @id @default(uuid()) @db.Uuid
-  externalId  String    @unique @default(uuid()) @db.Uuid
-  memberId    String    @db.Uuid
-  purpose     String
-  amountPaise Int
-  status      DueStatus @default(PENDING)
-  dueAt       DateTime
-  paidAt      DateTime?
-  member      Member    @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  payments    Payment[]
+  id             String                @id @default(uuid()) @db.Uuid
+  externalId     String                @unique @default(uuid()) @db.Uuid
+  memberId       String                @db.Uuid
+  planId         String?               @db.Uuid
+  purpose        String
+  amountPaise    Int
+  status         DueStatus             @default(PENDING)
+  dueAt          DateTime
+  paidAt         DateTime?
+  lastReminderAt DateTime?
+  createdAt      DateTime              @default(now())
+  member         Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  plan           CommunitySupportPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments       Payment[]
 
   @@index([memberId, status, dueAt])
+  @@index([planId, status])
   @@map("dues")
 }
 
@@ -565,12 +589,16 @@ model FoundationLedger {
 
 model CashCollection {
   id            String      @id @default(uuid()) @db.Uuid
+  externalId    String      @unique @default(uuid()) @db.Uuid
   coordinatorId String      @db.Uuid
   memberId      String      @db.Uuid
+  dueId         String      @unique @db.Uuid
+  paymentId     String      @unique @db.Uuid
   amountPaise   Int
   receiptNumber String      @unique
   status        CashStatus  @default(RECEIVED_BY_COORDINATOR)
   coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+  member        Member      @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
   @@map("cash_collections")
 }

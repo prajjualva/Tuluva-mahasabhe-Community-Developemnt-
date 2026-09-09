@@ -9,9 +9,13 @@ export async function GET(request: NextRequest) {
     const memberId = await memberIdForUser(principal.userId);
     const wallet = await prisma.wallet.findUnique({
       where: { memberId },
-      select: { balancePaise: true, version: true },
+      // A wallet's database id and optimistic-lock version are implementation details.
+      // Members only need the balance from this endpoint; activity has its own scoped feed.
+      select: { balancePaise: true },
     });
-    return NextResponse.json(wallet ?? { balancePaise: 0, version: 0 });
+    return NextResponse.json(wallet ?? { balancePaise: 0 }, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   } catch {
     return NextResponse.json({ error: "Request denied" }, { status: 403 });
   }

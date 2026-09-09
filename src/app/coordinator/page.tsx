@@ -1,3 +1,5 @@
+import { CoordinatorPlanQueue } from "./plan-queue";
+import { CoordinatorCashCollection } from "./cash-collection";
 const metrics = [
   "Assigned Members",
   "Pending dues",
@@ -23,6 +25,8 @@ export default function CoordinatorDashboard() {
           </article>
         ))}
       </div>
+      <CoordinatorPlanQueue />
+      <CoordinatorCashCollection />
     </main>
   );
 }

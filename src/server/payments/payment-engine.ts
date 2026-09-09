@@ -17,7 +17,7 @@ export function planRegistrationDue(now = new Date()) {
   return {
     amountPaise: MONEY.planRegistration,
     dueAt: new Date(now.getTime() + 30 * 86400000),
-    status: "PAYMENT_PENDING" as const,
+    status: "PENDING" as const,
   };
 }
 
