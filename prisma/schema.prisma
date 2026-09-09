@@ -1,0 +1,669 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipStatus {
+  ACTIVE
+  GRACE
+  INACTIVE
+  CLOSED
+  DECEASED
+}
+
+enum PlanStatus {
+  NOT_REGISTERED
+  PENDING_COORDINATOR_APPROVAL
+  PENDING_ADMIN_APPROVAL
+  PAYMENT_PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+enum DueStatus {
+  PENDING
+  OVERDUE
+  EXPIRED
+  PAID
+  CANCELLED
+  WAIVED
+}
+
+enum DeathCaseStatus {
+  REPORTED
+  COORDINATOR_CONFIRMED
+  ADMIN_VERIFICATION
+  APPROVED
+  REJECTED
+  SUPPORT_PAYMENT_PENDING
+  PAID
+  CLOSED
+  CANCELLED
+}
+
+enum NomineeStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  INACTIVE
+}
+
+enum CashStatus {
+  RECEIVED_BY_COORDINATOR
+  PENDING_ADMIN_VERIFICATION
+  PAID
+  REJECTED
+  UNRESOLVED
+}
+
+enum AutopayStatus {
+  NOT_SET
+  ACTIVE
+  FAILED
+  EXPIRED
+  REVOKED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  ONLINE
+  WALLET
+  CASH
+  MANUAL
+}
+
+enum WalletDirection {
+  CREDIT
+  DEBIT
+}
+
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CoordinatorStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum NewsStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+model User {
+  id               String                @id @default(uuid()) @db.Uuid
+  externalId       String                @unique @default(uuid()) @db.Uuid
+  email            String?               @unique
+  mobile           String?               @unique
+  passwordHash     String?
+  emailVerifiedAt  DateTime?
+  mobileVerifiedAt DateTime?
+  pendingEmail     String?               @unique
+  pendingMobile    String?               @unique
+  status           UserStatus            @default(ACTIVE)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  member           Member?
+  roles            UserRole[]
+  auditLogs        AuditLog[]            @relation("AuditActor")
+  verifiedNominees NomineeVerification[] @relation("NomineeVerifier")
+  sessions         AuthSession[]
+  otpChallenges    OtpChallenge[]
+  passwordResets   PasswordReset[]
+
+  @@map("users")
+}
+
+model AuthSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  invalidatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  userAgentHash String?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, expiresAt])
+  @@map("auth_sessions")
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String?   @db.Uuid
+  destination String
+  purpose     String
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([destination, purpose, createdAt])
+  @@map("otp_challenges")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("password_resets")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  name        String
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  description String
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  active     Boolean  @default(true)
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Member {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  externalId         String                 @unique @default(uuid()) @db.Uuid
+  userId             String                 @unique @db.Uuid
+  coordinatorId      String?                @db.Uuid
+  fullName           String
+  address            String
+  status             MembershipStatus       @default(ACTIVE)
+  joinedAt           DateTime               @default(now())
+  closedAt           DateTime?
+  deceasedAt         DateTime?
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  coordinator        Coordinator?           @relation("AssignedCoordinator", fields: [coordinatorId], references: [id], onDelete: Restrict)
+  coordinatorProfile Coordinator?           @relation("CoordinatorProfile")
+  memberships        Membership[]
+  plans              CommunitySupportPlan[]
+  nominees           Nominee[]
+  dues               Due[]
+  payments           Payment[]
+  wallet             Wallet?
+  contributions      Contribution[]
+  transfers          CoordinatorTransfer[]
+  deathCases         DeathCase[]            @relation("SubjectMember")
+  referral           Referral?
+
+  @@index([status])
+  @@index([coordinatorId])
+  @@map("members")
+}
+
+model Coordinator {
+  id              String                      @id @default(uuid()) @db.Uuid
+  memberId        String                      @unique @db.Uuid
+  referralCode    String                      @unique
+  isSuspended     Boolean                     @default(false)
+  status          CoordinatorStatus           @default(ACTIVE)
+  suspendedAt     DateTime?
+  member          Member                      @relation("CoordinatorProfile", fields: [memberId], references: [id], onDelete: Restrict)
+  assignedMembers Member[]                    @relation("AssignedCoordinator")
+  referrals       Referral[]
+  cashCollections CashCollection[]
+  lifecycleEvents CoordinatorLifecycleEvent[]
+
+  @@index([isSuspended])
+  @@map("coordinators")
+}
+
+model CoordinatorLifecycleEvent {
+  id            String      @id @default(uuid()) @db.Uuid
+  coordinatorId String      @db.Uuid
+  action        String
+  reason        String?
+  actorId       String      @db.Uuid
+  createdAt     DateTime    @default(now())
+  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+
+  @@index([coordinatorId, createdAt])
+  @@map("coordinator_lifecycle_events")
+}
+
+model Referral {
+  id            String      @id @default(uuid()) @db.Uuid
+  coordinatorId String      @db.Uuid
+  memberId      String      @unique @db.Uuid
+  createdAt     DateTime    @default(now())
+  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+  member        Member      @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@map("referrals")
+}
+
+model CoordinatorTransfer {
+  id                String   @id @default(uuid()) @db.Uuid
+  memberId          String   @db.Uuid
+  fromCoordinatorId String?  @db.Uuid
+  toCoordinatorId   String?  @db.Uuid
+  reason            String
+  effectiveAt       DateTime @default(now())
+  actorId           String   @db.Uuid
+  member            Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@index([memberId, effectiveAt])
+  @@map("coordinator_transfer_history")
+}
+
+model Membership {
+  id        String             @id @default(uuid()) @db.Uuid
+  memberId  String             @db.Uuid
+  status    MembershipStatus
+  startedAt DateTime           @default(now())
+  endedAt   DateTime?
+  member    Member             @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  periods   MembershipPeriod[]
+
+  @@map("memberships")
+}
+
+model MembershipPeriod {
+  id           String     @id @default(uuid()) @db.Uuid
+  membershipId String     @db.Uuid
+  startsAt     DateTime
+  endsAt       DateTime?
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+
+  @@map("membership_periods")
+}
+
+model CommunitySupportPlan {
+  id            String     @id @default(uuid()) @db.Uuid
+  memberId      String     @db.Uuid
+  status        PlanStatus @default(NOT_REGISTERED)
+  activatedAt   DateTime?
+  waitingEndsAt DateTime?
+  member        Member     @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@index([memberId, status])
+  @@map("community_support_plans")
+}
+
+model Nominee {
+  id                      String                @id @default(uuid()) @db.Uuid
+  memberId                String                @db.Uuid
+  kind                    String
+  fullName                String
+  relationship            String
+  bankEncrypted           Json?
+  status                  NomineeStatus         @default(PENDING_VERIFICATION)
+  isCurrent               Boolean               @default(true)
+  replacesNomineeId       String?               @db.Uuid
+  contactDetails          Json?
+  identificationEncrypted Json?
+  member                  Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  verifications           NomineeVerification[]
+  documents               NomineeDocument[]
+
+  @@index([memberId, status])
+  @@map("nominees")
+}
+
+model NomineeVerification {
+  id           String        @id @default(uuid()) @db.Uuid
+  nomineeId    String        @db.Uuid
+  status       NomineeStatus
+  verifiedById String?       @db.Uuid
+  verifiedAt   DateTime?
+  nominee      Nominee       @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+  verifiedBy   User?         @relation("NomineeVerifier", fields: [verifiedById], references: [id], onDelete: Restrict)
+
+  @@map("nominee_verifications")
+}
+
+model NomineeDocument {
+  id          String  @id @default(uuid()) @db.Uuid
+  nomineeId   String  @db.Uuid
+  storageKey  String  @unique
+  contentType String
+  nominee     Nominee @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+
+  @@map("nominee_documents")
+}
+
+model DeathCase {
+  id               String             @id @default(uuid()) @db.Uuid
+  externalId       String             @unique @default(uuid()) @db.Uuid
+  memberId         String?            @db.Uuid
+  reporterIdentity String
+  placeOfDeath     String
+  dateOfDeath      DateTime
+  details          String?
+  status           DeathCaseStatus    @default(REPORTED)
+  member           Member?            @relation("SubjectMember", fields: [memberId], references: [id], onDelete: Restrict)
+  documents        DeathDocument[]
+  event            ContributionEvent?
+  supportCase      SupportCase?
+
+  @@index([memberId, status])
+  @@map("death_cases")
+}
+
+model DeathDocument {
+  id          String    @id @default(uuid()) @db.Uuid
+  deathCaseId String    @db.Uuid
+  storageKey  String    @unique
+  contentType String
+  sensitivity String    @default("RESTRICTED")
+  deathCase   DeathCase @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+
+  @@map("death_documents")
+}
+
+model ContributionEvent {
+  id            String          @id @default(uuid()) @db.Uuid
+  externalId    String          @unique @default(uuid()) @db.Uuid
+  deathCaseId   String          @unique @db.Uuid
+  publishedAt   DateTime?
+  status        DeathCaseStatus @default(APPROVED)
+  deathCase     DeathCase       @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  contributions Contribution[]
+
+  @@map("contribution_events")
+}
+
+model Contribution {
+  id          String            @id @default(uuid()) @db.Uuid
+  eventId     String            @db.Uuid
+  memberId    String            @db.Uuid
+  amountPaise Int
+  dueId       String?           @unique @db.Uuid
+  event       ContributionEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  member      Member            @relation(fields: [memberId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, memberId])
+  @@map("contributions")
+}
+
+model Due {
+  id          String    @id @default(uuid()) @db.Uuid
+  externalId  String    @unique @default(uuid()) @db.Uuid
+  memberId    String    @db.Uuid
+  purpose     String
+  amountPaise Int
+  status      DueStatus @default(PENDING)
+  dueAt       DateTime
+  paidAt      DateTime?
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  payments    Payment[]
+
+  @@index([memberId, status, dueAt])
+  @@map("dues")
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  externalId        String        @unique @default(uuid()) @db.Uuid
+  memberId          String?       @db.Uuid
+  dueId             String?       @db.Uuid
+  amountPaise       Int
+  method            PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  providerReference String?       @unique
+  idempotencyKey    String        @unique
+  receipt           Receipt?
+  member            Member?       @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  due               Due?          @relation(fields: [dueId], references: [id], onDelete: Restrict)
+  createdAt         DateTime      @default(now())
+
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model PaymentWebhook {
+  id              String    @id @default(uuid()) @db.Uuid
+  provider        String
+  providerEventId String
+  payload         Json
+  processedAt     DateTime?
+
+  @@unique([provider, providerEventId])
+  @@map("payment_webhooks")
+}
+
+model PaymentMandate {
+  id                String        @id @default(uuid()) @db.Uuid
+  memberId          String        @db.Uuid
+  providerReference String        @unique
+  status            AutopayStatus @default(NOT_SET)
+
+  @@map("payment_mandates")
+}
+
+model Receipt {
+  id            String   @id @default(uuid()) @db.Uuid
+  paymentId     String   @unique @db.Uuid
+  receiptNumber String   @unique
+  issuedAt      DateTime @default(now())
+  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@map("receipts")
+}
+
+model Wallet {
+  id           String              @id @default(uuid()) @db.Uuid
+  memberId     String              @unique @db.Uuid
+  balancePaise Int                 @default(0)
+  version      Int                 @default(0)
+  member       Member              @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id                String          @id @default(uuid()) @db.Uuid
+  walletId          String          @db.Uuid
+  direction         WalletDirection
+  amountPaise       Int
+  balanceAfterPaise Int
+  purpose           String
+  relatedExternalId String?
+  createdAt         DateTime        @default(now())
+  wallet            Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@index([walletId, createdAt])
+  @@map("wallet_transactions")
+}
+
+model SupportCase {
+  id              String           @id @default(uuid()) @db.Uuid
+  deathCaseId     String           @unique @db.Uuid
+  nomineeId       String?          @db.Uuid
+  status          DeathCaseStatus  @default(SUPPORT_PAYMENT_PENDING)
+  exceptionReason String?
+  deathCase       DeathCase        @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  payments        SupportPayment[]
+
+  @@map("support_cases")
+}
+
+model SupportPayment {
+  id                String        @id @default(uuid()) @db.Uuid
+  supportCaseId     String        @db.Uuid
+  amountPaise       Int
+  status            PaymentStatus @default(PENDING)
+  providerReference String?
+  supportCase       SupportCase   @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+
+  @@map("support_payments")
+}
+
+model FoundationLedger {
+  id                String          @id @default(uuid()) @db.Uuid
+  direction         LedgerDirection
+  amountPaise       Int
+  purpose           String
+  relatedExternalId String?
+  authorizedActorId String?         @db.Uuid
+  reference         String?
+  status            PaymentStatus   @default(PENDING)
+  createdAt         DateTime        @default(now())
+
+  @@index([createdAt, direction])
+  @@map("foundation_ledger")
+}
+
+model CashCollection {
+  id            String      @id @default(uuid()) @db.Uuid
+  coordinatorId String      @db.Uuid
+  memberId      String      @db.Uuid
+  amountPaise   Int
+  receiptNumber String      @unique
+  status        CashStatus  @default(RECEIVED_BY_COORDINATOR)
+  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+
+  @@map("cash_collections")
+}
+
+model CashDeposit {
+  id            String @id @default(uuid()) @db.Uuid
+  coordinatorId String @db.Uuid
+  evidenceKey   String
+  amountPaise   Int
+
+  @@map("cash_deposits")
+}
+
+model CashDiscrepancy {
+  id               String     @id @default(uuid()) @db.Uuid
+  cashCollectionId String     @unique @db.Uuid
+  status           CashStatus @default(UNRESOLVED)
+  reason           String
+
+  @@map("cash_discrepancies")
+}
+
+model Notification {
+  id       String    @id @default(uuid()) @db.Uuid
+  userId   String    @db.Uuid
+  channel  String
+  template String
+  payload  Json
+  sentAt   DateTime?
+
+  @@index([userId, sentAt])
+  @@map("notifications")
+}
+
+model CommunityNews {
+  id              String     @id @default(uuid()) @db.Uuid
+  title           String
+  body            String
+  publishedAt     DateTime?
+  status          NewsStatus @default(DRAFT)
+  authorId        String?    @db.Uuid
+  approvedById    String?    @db.Uuid
+  rejectionReason String?
+
+  @@map("community_news")
+}
+
+model Comment {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventId     String    @db.Uuid
+  userId      String    @db.Uuid
+  body        String
+  moderatedAt DateTime?
+
+  @@map("comments")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorId     String?  @db.Uuid
+  actorRole   String?
+  action      String
+  entityType  String
+  entityId    String
+  beforeState Json?
+  afterState  Json?
+  reason      String?
+  requestId   String?
+  ipHash      String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, createdAt])
+  @@map("audit_logs")
+}
+
+model SchemeSetting {
+  id              String                 @id @default(uuid()) @db.Uuid
+  key             String                 @unique
+  activeVersionId String?                @unique @db.Uuid
+  versions        SchemeSettingVersion[]
+
+  @@map("scheme_settings")
+}
+
+model SchemeSettingVersion {
+  id            String        @id @default(uuid()) @db.Uuid
+  settingId     String        @db.Uuid
+  value         Json
+  effectiveFrom DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  setting       SchemeSetting @relation(fields: [settingId], references: [id], onDelete: Restrict)
+
+  @@unique([settingId, effectiveFrom])
+  @@map("scheme_setting_versions")
+}

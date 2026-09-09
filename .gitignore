@@ -1,0 +1,10 @@
+node_modules/
+.npm-cache/
+.next/
+coverage/
+.env
+.env.local
+*.log
+*.tsbuildinfo
+uploads/
+prisma/*.db
