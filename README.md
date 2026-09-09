@@ -11,7 +11,7 @@ Production-oriented foundation for a community support platform. It is not an in
 
 ## Structure
 
-- `src/app` – application UI and route boundary (UI phases intentionally not built yet)
+- `src/app` – application UI and protected API routes for Member, Coordinator, and Administrator workflows
 - `src/domain` – central money and configurable scheme rules
 - `src/server/auth`, `audit`, `payments`, `validation`, `logging` – server-only security and integration foundations
 - `prisma` – relational schema, migrations, and development seed
@@ -27,6 +27,8 @@ Production-oriented foundation for a community support platform. It is not an in
 6. Start: `npm run dev`
 
 Useful validation commands: `npm run test`, `npm run lint`, `npm run build`, `npm run format:check`.
+
+See [the production-pilot checklist](docs/PRODUCTION_PILOT.md) before deployment.
 
 ## Security and financial design
 
