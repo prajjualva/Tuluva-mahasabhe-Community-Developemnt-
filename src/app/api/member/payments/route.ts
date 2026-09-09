@@ -25,14 +25,6 @@ export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
     const body = bodySchema.parse(await request.json());
-    if (body.method === "ONLINE") {
-      const availability = onlinePaymentAvailability();
-      if (!availability.available)
-        return NextResponse.json(
-          { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
-          { status: 503 },
-        );
-    }
     const memberId = await memberIdForUser(principal.userId);
     const dueId = await dueIdForMemberExternal(memberId, body.dueId);
     if (body.method === "WALLET")
@@ -41,9 +33,25 @@ export async function POST(request: NextRequest) {
       );
     const due = await prisma.due.findUniqueOrThrow({
       where: { id: dueId },
-      select: { purpose: true },
+      select: { purpose: true, amountPaise: true },
     });
+    const wallet = await prisma.wallet.findUnique({
+      where: { memberId },
+      select: { balancePaise: true },
+    });
+    // Wallet-first is authoritative: an online request cannot bypass sufficient
+    // Foundation wallet credit. Ordinary dues never use partial wallet credit.
+    if (body.method === "ONLINE" && (wallet?.balancePaise ?? 0) >= due.amountPaise)
+      return NextResponse.json(
+        await payDueFromWallet(memberId, dueId, principal.userId, body.idempotencyKey),
+      );
     if (body.method === "ONLINE" && due.purpose === "PLAN_REGISTRATION") {
+      const availability = onlinePaymentAvailability();
+      if (!availability.available)
+        return NextResponse.json(
+          { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
+          { status: 503 },
+        );
       const split = await startPlanWalletFirstSplitPayment(
         memberId,
         dueId,
@@ -78,6 +86,14 @@ export async function POST(request: NextRequest) {
         walletPaise: split.walletPaise,
         checkout: checkout.checkout,
       });
+    }
+    if (body.method === "ONLINE") {
+      const availability = onlinePaymentAvailability();
+      if (!availability.available)
+        return NextResponse.json(
+          { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
+          { status: 503 },
+        );
     }
     const payment = await createPaymentCommand({
       memberId,

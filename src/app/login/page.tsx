@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -37,6 +38,7 @@ export default function LoginPage() {
         <button type="submit">Sign in</button>
         {error && <p role="alert">{error}</p>}
       </form>
+      <Link href="/register">Create a member account</Link>
     </main>
   );
 }
