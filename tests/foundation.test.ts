@@ -35,6 +35,7 @@ import {
   handleDeceased,
   membershipStatus,
   membershipStatusAfterContributionPayment,
+  shouldMarkMembershipInactive,
 } from "../src/server/membership/membership-engine";
 import {
   allocateWalletPayment,
@@ -231,6 +232,9 @@ describe("membership and contribution engine", () => {
     const second = createContributionDue("two", new Date("2026-01-01"), new Date("2026-01-02"))!;
     expect(fifoAllocate([second, first], 10000)[0].dueId).toBe(first.id);
     expect(membershipStatus(6, false)).toBe("INACTIVE");
+    expect(shouldMarkMembershipInactive(5, false)).toBe(false);
+    expect(shouldMarkMembershipInactive(6, false)).toBe(true);
+    expect(shouldMarkMembershipInactive(0, true)).toBe(true);
   });
   it("waives unpaid dues and cancels AutoPay on death", () => {
     expect(handleDeceased([createMembershipDue()]).mandateStatus).toBe("CANCELLED");

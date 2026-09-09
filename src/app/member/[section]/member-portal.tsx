@@ -10,6 +10,21 @@ type Due = {
 };
 type Plan = { externalId?: string; status: string; activatedAt?: string; waitingEndsAt?: string };
 type Membership = { status: string; joinedAt: string };
+type Checkout = {
+  provider: "razorpay";
+  paymentExternalId: string;
+  orderId: string;
+  keyId: string;
+  amountPaise: number;
+  currency: "INR";
+};
+type RazorpayConstructor = new (options: Record<string, unknown>) => { open(): void };
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayConstructor;
+  }
+}
 type WalletActivity = {
   direction: "CREDIT" | "DEBIT";
   amountPaise: number;
@@ -21,6 +36,30 @@ type WalletActivity = {
 const money = (paise: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 const key = () => crypto.randomUUID();
+
+async function openGatewayCheckout(checkout: Checkout) {
+  if (!window.Razorpay) {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Could not load the payment checkout"));
+      document.head.appendChild(script);
+    });
+  }
+  if (!window.Razorpay) throw new Error("Payment checkout is unavailable");
+  new window.Razorpay({
+    key: checkout.keyId,
+    amount: checkout.amountPaise,
+    currency: checkout.currency,
+    order_id: checkout.orderId,
+    name: "Community Support Foundation",
+    description: "Foundation contribution or membership payment",
+    notes: { foundation_payment_external_id: checkout.paymentExternalId },
+    handler: () => undefined,
+  }).open();
+}
 
 export function MemberPortal({ section }: { section: string }) {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -83,11 +122,23 @@ export function MemberPortal({ section }: { section: string }) {
       body: JSON.stringify({ dueId: due.externalId, method, idempotencyKey: key() }),
     });
     const data = await result.json();
+    if (result.ok && data.checkout) {
+      try {
+        await openGatewayCheckout(data.checkout as Checkout);
+        setMessage(
+          "Gateway checkout opened. Your payment will be confirmed only after the verified provider webhook arrives.",
+        );
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Payment checkout is unavailable");
+      }
+      await load();
+      return;
+    }
     setMessage(
       result.ok
         ? method === "WALLET"
           ? "Wallet payment settled and receipt issued."
-          : "Online payment created. Any available wallet balance was applied first; complete the remainder with the configured payment provider."
+          : "Online payment is awaiting the configured payment provider."
         : (data.error ?? "Payment could not be started"),
     );
     await load();

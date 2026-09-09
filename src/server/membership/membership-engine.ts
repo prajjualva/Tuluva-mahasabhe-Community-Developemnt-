@@ -51,6 +51,13 @@ export function membershipStatus(
   if (expiredContributionCount >= 6 || membershipGraceExpired) return "INACTIVE";
   return "ACTIVE";
 }
+
+export function shouldMarkMembershipInactive(
+  expiredContributionCount: number,
+  hasExpiredMembershipDue: boolean,
+) {
+  return expiredContributionCount >= 6 || hasExpiredMembershipDue;
+}
 export function fifoAllocate(dues: Due[], amountPaise: number, selectedDueId?: string) {
   const targets = selectedDueId
     ? dues.filter((d) => d.id === selectedDueId)
