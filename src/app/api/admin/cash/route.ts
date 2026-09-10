@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
       select: {
         externalId: true,
         amountPaise: true,
+        method: true,
         receiptNumber: true,
         member: { select: { externalId: true, fullName: true } },
       },

@@ -98,6 +98,49 @@ describe("online payment-provider boundary", () => {
     ).rejects.toBeInstanceOf(PaymentProviderRequestError);
   });
 
+  it("submits a Razorpay refund with the provider's idempotency header", async () => {
+    let receivedBody = "";
+    let receivedHeaders: Record<string, string> = {};
+    const provider = new RazorpayPaymentProvider(
+      {
+        keyId: environment.RAZORPAY_KEY_ID,
+        keySecret: environment.RAZORPAY_KEY_SECRET,
+        webhookSecret: environment.RAZORPAY_WEBHOOK_SECRET,
+      },
+      async (_input, init) => {
+        receivedBody = String(init?.body);
+        receivedHeaders = init?.headers as Record<string, string>;
+        return new Response(
+          JSON.stringify({
+            id: "rfnd_real_gateway_123",
+            amount: 36_900,
+            payment_id: "pay_real_gateway_123",
+            status: "processed",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    );
+
+    await expect(
+      provider.refundCapturedPayment({
+        refundExternalId: "8b8a1c80-341f-4450-9683-7c7bc3435ae2",
+        providerPaymentReference: "pay_real_gateway_123",
+        amountPaise: 36_900,
+        idempotencyKey: "refund-command-0001",
+      }),
+    ).resolves.toEqual({
+      provider: "razorpay",
+      refundReference: "rfnd_real_gateway_123",
+      status: "SUCCEEDED",
+    });
+    expect(receivedHeaders["x-refund-idempotency"]).toBe("refund-command-0001");
+    expect(JSON.parse(receivedBody)).toMatchObject({
+      amount: 36_900,
+      receipt: "8b8a1c80-341f-4450-9683-7c7bc3435ae2",
+    });
+  });
+
   it("accepts only a signed Razorpay webhook and normalizes it without trusting client input", () => {
     const configured = getPaymentProvider(environment);
     if (!configured.available) throw new Error("Expected configured payment provider");
@@ -121,6 +164,7 @@ describe("online payment-provider boundary", () => {
 
     expect(provider.verifyWebhook(rawBody, signature)).toMatchObject({
       provider: "razorpay",
+      kind: "PAYMENT",
       providerEventId: "payment.captured:pay_real_gateway_123",
       type: "PAYMENT_SUCCEEDED",
       paymentExternalId,
@@ -131,5 +175,38 @@ describe("online payment-provider boundary", () => {
     expect(() => provider.verifyWebhook(rawBody, "not-a-valid-signature")).toThrow(
       PaymentProviderSignatureError,
     );
+  });
+
+  it("normalizes a signed processed-refund webhook using the Foundation refund UUID", () => {
+    const configured = getPaymentProvider(environment);
+    if (!configured.available) throw new Error("Expected configured payment provider");
+    const refundExternalId = "8b8a1c80-341f-4450-9683-7c7bc3435ae2";
+    const rawBody = JSON.stringify({
+      event: "refund.processed",
+      payload: {
+        refund: {
+          entity: {
+            id: "rfnd_real_gateway_123",
+            payment_id: "pay_real_gateway_123",
+            amount: 36_900,
+            created_at: 1_788_912_000,
+            notes: { foundation_refund_external_id: refundExternalId },
+          },
+        },
+      },
+    });
+    const signature = createHmac("sha256", environment.RAZORPAY_WEBHOOK_SECRET)
+      .update(rawBody)
+      .digest("hex");
+
+    expect(configured.provider.verifyWebhook(rawBody, signature)).toMatchObject({
+      provider: "razorpay",
+      kind: "REFUND",
+      type: "REFUND_SUCCEEDED",
+      refundExternalId,
+      refundReference: "rfnd_real_gateway_123",
+      providerPaymentReference: "pay_real_gateway_123",
+      amountPaise: 36_900,
+    });
   });
 });

@@ -8,8 +8,8 @@ import {
   runSerializablePaymentTransaction,
 } from "../payments/payment-integrity";
 
-const cashReceiptNumber = (externalId: string) =>
-  `CASH-${new Date().getUTCFullYear()}-${externalId.replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+const collectionReceiptNumber = (method: "CASH" | "MANUAL", externalId: string) =>
+  `${method}-${new Date().getUTCFullYear()}-${externalId.replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 /**
  * A failed collection is historical evidence, not a reason to permanently
  * prevent the member from paying again. Every other collection state blocks a
@@ -25,6 +25,7 @@ export async function collectCashForDue(input: {
   memberExternalId: string;
   dueExternalId: string;
   idempotencyKey: string;
+  method?: "CASH" | "MANUAL";
 }) {
   try {
     return await runSerializablePaymentTransaction(async (tx) => {
@@ -52,7 +53,11 @@ export async function collectCashForDue(input: {
           where: { id: existing.dueId ?? "", externalId: input.dueExternalId },
           select: { id: true },
         });
-        if (existing.memberId !== member.id || existing.method !== "CASH" || !matchesDue)
+        if (
+          existing.memberId !== member.id ||
+          existing.method !== (input.method ?? "CASH") ||
+          !matchesDue
+        )
           throw new Error("Idempotency key is already in use");
         return existing;
       }
@@ -66,14 +71,14 @@ export async function collectCashForDue(input: {
         select: { status: true },
       });
       if (!canCreateCashCollectionForDue(priorCollections.map((collection) => collection.status)))
-        throw new Error("A cash collection is already open or settled for this due");
+        throw new Error("A Coordinator payment is already open or settled for this due");
       await assertNoPendingPaymentForDue(tx, due.id, input.idempotencyKey);
       const payment = await tx.payment.create({
         data: {
           memberId: member.id,
           dueId: due.id,
           amountPaise: due.amountPaise,
-          method: "CASH",
+          method: input.method ?? "CASH",
           idempotencyKey: input.idempotencyKey,
         },
       });
@@ -84,17 +89,22 @@ export async function collectCashForDue(input: {
           dueId: due.id,
           paymentId: payment.id,
           amountPaise: due.amountPaise,
-          receiptNumber: cashReceiptNumber(payment.externalId),
+          method: input.method ?? "CASH",
+          receiptNumber: collectionReceiptNumber(input.method ?? "CASH", payment.externalId),
           status: "PENDING_ADMIN_VERIFICATION",
         },
       });
       await tx.auditLog.create({
         data: {
           actorId: input.coordinatorUserId,
-          action: "CASH_COLLECTION_RECORDED",
+          action: "COORDINATOR_PAYMENT_RECORDED",
           entityType: "CashCollection",
           entityId: collection.id,
-          afterState: { amountPaise: due.amountPaise, dueExternalId: due.externalId },
+          afterState: {
+            amountPaise: due.amountPaise,
+            dueExternalId: due.externalId,
+            method: input.method ?? "CASH",
+          },
         },
       });
       return payment;
@@ -103,7 +113,7 @@ export async function collectCashForDue(input: {
     // The partial unique index is the final race-safe guard when two
     // Coordinators attempt recollection at the same time.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
-      throw new Error("A cash collection is already open or settled for this due");
+      throw new Error("A Coordinator payment is already open or settled for this due");
     throw error;
   }
 }
@@ -120,10 +130,10 @@ export async function verifyCashCollection(
       where: { externalId: externalCollectionId },
     });
     if (!collection || collection.status !== "PENDING_ADMIN_VERIFICATION")
-      throw new Error("Cash collection is not awaiting verification");
+      throw new Error("Coordinator payment is not awaiting verification");
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: collection.paymentId } });
     if (approved) {
-      if (payment.status !== "PENDING") throw new Error("Cash payment is not pending");
+      if (payment.status !== "PENDING") throw new Error("Coordinator payment is not pending");
       const due = await tx.due.findUniqueOrThrow({ where: { id: collection.dueId } });
       assertDueSettlementAllowed(due);
       const claimed = await tx.due.updateMany({
@@ -164,7 +174,7 @@ export async function verifyCashCollection(
     await tx.auditLog.create({
       data: {
         actorId: adminUserId,
-        action: approved ? "CASH_COLLECTION_VERIFIED" : "CASH_COLLECTION_REJECTED",
+        action: approved ? "COORDINATOR_PAYMENT_VERIFIED" : "COORDINATOR_PAYMENT_REJECTED",
         entityType: "CashCollection",
         entityId: collection.id,
         reason: reason?.trim(),

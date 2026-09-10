@@ -77,6 +77,13 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 enum PaymentMethod {
   ONLINE
   WALLET
@@ -475,22 +482,23 @@ model Due {
 }
 
 model Payment {
-  id                String        @id @default(uuid()) @db.Uuid
-  externalId        String        @unique @default(uuid()) @db.Uuid
-  memberId          String?       @db.Uuid
-  dueId             String?       @db.Uuid
+  id                String         @id @default(uuid()) @db.Uuid
+  externalId        String         @unique @default(uuid()) @db.Uuid
+  memberId          String?        @db.Uuid
+  dueId             String?        @db.Uuid
   amountPaise       Int
-    method            PaymentMethod
-    status            PaymentStatus @default(PENDING)
-    // The provider order is assigned before checkout. The captured payment
-    // reference is assigned only after a verified webhook settles it.
-    providerOrderId   String?       @unique
-    providerReference String?       @unique
-  idempotencyKey    String        @unique
+  method            PaymentMethod
+  status            PaymentStatus  @default(PENDING)
+  // The provider order is assigned before checkout. The captured payment
+  // reference is assigned only after a verified webhook settles it.
+  providerOrderId   String?        @unique
+  providerReference String?        @unique
+  idempotencyKey    String         @unique
   receipt           Receipt?
-  member            Member?       @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  due               Due?          @relation(fields: [dueId], references: [id], onDelete: Restrict)
-  createdAt         DateTime      @default(now())
+  refund            PaymentRefund?
+  member            Member?        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  due               Due?           @relation(fields: [dueId], references: [id], onDelete: Restrict)
+  createdAt         DateTime       @default(now())
 
   @@index([status, createdAt])
   @@map("payments")
@@ -524,6 +532,30 @@ model Receipt {
   payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   @@map("receipts")
+}
+
+/**
+ * A full-payment refund is an immutable compensating record. The original
+ * settled payment and its receipt remain historical evidence; this row and its
+ * matching debit ledger entry show the reversal instead of overwriting them.
+ */
+model PaymentRefund {
+  id                String        @id @default(uuid()) @db.Uuid
+  externalId        String        @unique @default(uuid()) @db.Uuid
+  paymentId         String        @unique @db.Uuid
+  amountPaise       Int
+  method            PaymentMethod
+  status            RefundStatus  @default(PENDING)
+  reason            String
+  providerReference String?       @unique
+  idempotencyKey    String        @unique
+  authorizedActorId String?       @db.Uuid
+  completedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  payment           Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@map("payment_refunds")
 }
 
 model Wallet {
@@ -591,17 +623,18 @@ model FoundationLedger {
 }
 
 model CashCollection {
-  id            String      @id @default(uuid()) @db.Uuid
-  externalId    String      @unique @default(uuid()) @db.Uuid
-  coordinatorId String      @db.Uuid
-  memberId      String      @db.Uuid
-  dueId         String      @db.Uuid
-  paymentId     String      @unique @db.Uuid
+  id            String        @id @default(uuid()) @db.Uuid
+  externalId    String        @unique @default(uuid()) @db.Uuid
+  coordinatorId String        @db.Uuid
+  memberId      String        @db.Uuid
+  dueId         String        @db.Uuid
+  paymentId     String        @unique @db.Uuid
   amountPaise   Int
-  receiptNumber String      @unique
-  status        CashStatus  @default(RECEIVED_BY_COORDINATOR)
-  coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
-  member        Member      @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  method        PaymentMethod @default(CASH)
+  receiptNumber String        @unique
+  status        CashStatus    @default(RECEIVED_BY_COORDINATOR)
+  coordinator   Coordinator   @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+  member        Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
   @@index([dueId, status])
   @@map("cash_collections")

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 type Collection = {
   externalId: string;
   amountPaise: number;
+  method: "CASH" | "MANUAL";
   receiptNumber: string;
   member: { externalId: string; fullName: string };
 };
@@ -30,24 +31,25 @@ export function AdminCashQueue() {
     setMessage(
       response.ok
         ? approved
-          ? "Cash payment verified and official receipt issued."
-          : "Cash collection rejected and audit recorded."
-        : "Cash verification was denied.",
+          ? "Coordinator payment verified and official receipt issued."
+          : "Coordinator payment rejected and audit recorded."
+        : "Payment verification was denied.",
     );
     await load();
   };
   return (
     <article>
-      <h2>Cash verification</h2>
+      <h2>Coordinator payment verification</h2>
       <p>{message}</p>
       {collections.length ? (
         collections.map((collection) => (
           <div key={collection.externalId}>
             <strong>{collection.member.fullName}</strong>
             <p>
-              {collection.receiptNumber} · ₹{(collection.amountPaise / 100).toFixed(2)}
+              {collection.method} · {collection.receiptNumber} · ₹
+              {(collection.amountPaise / 100).toFixed(2)}
             </p>
-            <button onClick={() => verify(collection.externalId, true)}>Verify cash</button>
+            <button onClick={() => verify(collection.externalId, true)}>Verify payment</button>
             <button onClick={() => verify(collection.externalId, false)}>Reject</button>
           </div>
         ))

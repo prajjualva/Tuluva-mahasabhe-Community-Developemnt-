@@ -2,11 +2,8 @@ import { NextRequest } from "next/server";
 import { assertSessionActive, verifyAccessToken } from "../auth/session";
 import { requirePermission } from "../auth/authorization";
 import { prisma } from "../database/prisma";
-export async function requireApiPermission(request: NextRequest, permission: string) {
-  const token =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.cookies.get("access_token")?.value;
-  if (!token) throw new Error("Unauthenticated");
+
+export async function requirePermissionForAccessToken(token: string, permission: string) {
   const tokenPrincipal = await verifyAccessToken(token);
   await assertSessionActive(token, tokenPrincipal.userId);
   // Permissions are read from the database for every request so revoked roles and
@@ -38,4 +35,12 @@ export async function requireApiPermission(request: NextRequest, permission: str
   };
   requirePermission(principal, permission);
   return principal;
+}
+
+export async function requireApiPermission(request: NextRequest, permission: string) {
+  const token =
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+    request.cookies.get("access_token")?.value;
+  if (!token) throw new Error("Unauthenticated");
+  return requirePermissionForAccessToken(token, permission);
 }

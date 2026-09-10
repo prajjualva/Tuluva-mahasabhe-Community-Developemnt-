@@ -1,5 +1,6 @@
 import { CoordinatorPlanQueue } from "./plan-queue";
 import { CoordinatorCashCollection } from "./cash-collection";
+import { requirePagePermission } from "../../server/http/page-authorize";
 const metrics = [
   "Assigned Members",
   "Pending dues",
@@ -8,7 +9,8 @@ const metrics = [
   "Death reports",
   "Cash awaiting verification",
 ];
-export default function CoordinatorDashboard() {
+export default async function CoordinatorDashboard() {
+  await requirePagePermission("coordinator:members:manage", "/coordinator");
   return (
     <main>
       <p className="eyebrow">COORDINATOR CONSOLE</p>

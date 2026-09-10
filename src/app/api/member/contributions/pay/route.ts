@@ -25,14 +25,6 @@ export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
     const body = bodySchema.parse(await request.json());
-    if (body.method === "ONLINE") {
-      const availability = onlinePaymentAvailability();
-      if (!availability.available)
-        return NextResponse.json(
-          { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
-          { status: 503 },
-        );
-    }
     const memberId = await memberIdForUser(principal.userId);
     // Resolve an idempotent replay before selecting an outstanding due: a
     // successful first request will already have marked that contribution PAID.
@@ -96,6 +88,32 @@ export async function POST(request: NextRequest) {
         dueExternalId: due.externalId,
       });
     }
+    // Wallet-first applies to ₹100 contributions too. Unlike the ₹1,000 plan
+    // registration, an ordinary contribution never consumes a partial wallet
+    // balance: if it is insufficient, the online checkout is for the full due.
+    const wallet = await prisma.wallet.findUnique({
+      where: { memberId },
+      select: { balancePaise: true },
+    });
+    if ((wallet?.balancePaise ?? 0) >= due.amountPaise) {
+      const settled = await payDueFromWallet(
+        memberId,
+        due.id,
+        principal.userId,
+        body.idempotencyKey,
+      );
+      return NextResponse.json({
+        externalId: settled.payment.externalId,
+        status: settled.payment.status,
+        dueExternalId: due.externalId,
+      });
+    }
+    const availability = onlinePaymentAvailability();
+    if (!availability.available)
+      return NextResponse.json(
+        { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
+        { status: 503 },
+      );
     const payment = await createPaymentCommand({
       memberId,
       dueId: due.id,

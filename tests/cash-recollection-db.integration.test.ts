@@ -87,40 +87,43 @@ databaseDescribe("cash recollection persistence", () => {
       memberExternalId: member.externalId,
       dueExternalId: due.externalId,
       idempotencyKey: `cash-retry-${marker}`,
+      method: "MANUAL",
     });
     expect(replacement.id).not.toBe(first.id);
+    expect(replacement.method).toBe("MANUAL");
     const collections = await prisma.cashCollection.findMany({
       where: { dueId: due.id },
-      select: { status: true },
+      select: { status: true, method: true, receiptNumber: true },
     });
     expect(collections).toHaveLength(2);
     expect(collections.map((collection) => collection.status).sort()).toEqual([
       "PENDING_ADMIN_VERIFICATION",
       "REJECTED",
     ]);
+    const manual = collections.find((collection) => collection.method === "MANUAL");
+    expect(manual?.receiptNumber).toMatch(/^MANUAL-\d{4}-/);
   }, 30_000);
 });
 
 afterAll(async () => {
   if (!runDatabaseTests || !created.coordinatorUserId) return;
-  await prisma.$transaction(async (tx) => {
-    if (created.dueId)
-      await tx.auditLog.deleteMany({ where: { entityId: { in: [created.dueId] } } });
-    await tx.auditLog.deleteMany({
-      where: { actorId: { in: [created.coordinatorUserId, created.memberUserId] } },
-    });
-    if (created.dueId) await tx.cashCollection.deleteMany({ where: { dueId: created.dueId } });
-    if (created.dueId) await tx.payment.deleteMany({ where: { dueId: created.dueId } });
-    if (created.dueId) await tx.due.deleteMany({ where: { id: created.dueId } });
-    if (created.memberId)
-      await tx.member.update({ where: { id: created.memberId }, data: { coordinatorId: null } });
-    if (created.coordinatorMemberId)
-      await tx.coordinator.deleteMany({ where: { memberId: created.coordinatorMemberId } });
-    if (created.memberId) await tx.member.deleteMany({ where: { id: created.memberId } });
-    if (created.coordinatorMemberId)
-      await tx.member.deleteMany({ where: { id: created.coordinatorMemberId } });
-    if (created.memberUserId) await tx.user.deleteMany({ where: { id: created.memberUserId } });
-    if (created.coordinatorUserId)
-      await tx.user.deleteMany({ where: { id: created.coordinatorUserId } });
+  // Neon can take longer than Prisma's short interactive-transaction default.
+  // This is test-only cleanup, so independent ordered deletes are safer and do
+  // not weaken the production transaction guarantees being exercised above.
+  await prisma.auditLog.deleteMany({
+    where: { actorId: { in: [created.coordinatorUserId, created.memberUserId] } },
   });
+  if (created.dueId) await prisma.cashCollection.deleteMany({ where: { dueId: created.dueId } });
+  if (created.dueId) await prisma.payment.deleteMany({ where: { dueId: created.dueId } });
+  if (created.dueId) await prisma.due.deleteMany({ where: { id: created.dueId } });
+  if (created.memberId)
+    await prisma.member.update({ where: { id: created.memberId }, data: { coordinatorId: null } });
+  if (created.coordinatorMemberId)
+    await prisma.coordinator.deleteMany({ where: { memberId: created.coordinatorMemberId } });
+  if (created.memberId) await prisma.member.deleteMany({ where: { id: created.memberId } });
+  if (created.coordinatorMemberId)
+    await prisma.member.deleteMany({ where: { id: created.coordinatorMemberId } });
+  if (created.memberUserId) await prisma.user.deleteMany({ where: { id: created.memberUserId } });
+  if (created.coordinatorUserId)
+    await prisma.user.deleteMany({ where: { id: created.coordinatorUserId } });
 });

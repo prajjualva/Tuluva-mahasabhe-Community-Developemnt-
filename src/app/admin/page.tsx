@@ -2,6 +2,8 @@ import { AdminPlanQueue } from "./plan-queue";
 import { AdminCashQueue } from "./cash-queue";
 import { AdminAuditFeed } from "./audit-feed";
 import { AdminWalletCredit } from "./wallet-credit";
+import { AdminPaymentRefunds } from "./payment-refunds";
+import { requirePagePermission } from "../../server/http/page-authorize";
 const queues = [
   "Member status summary",
   "Coordinator management",
@@ -12,7 +14,8 @@ const queues = [
   "Foundation Ledger",
   "Audit activity",
 ];
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+  await requirePagePermission("admin:*", "/admin");
   return (
     <main>
       <p className="eyebrow">ADMIN COMMAND CENTER</p>
@@ -29,6 +32,7 @@ export default function AdminDashboard() {
       <AdminPlanQueue />
       <AdminCashQueue />
       <AdminWalletCredit />
+      <AdminPaymentRefunds />
       <AdminAuditFeed />
     </main>
   );

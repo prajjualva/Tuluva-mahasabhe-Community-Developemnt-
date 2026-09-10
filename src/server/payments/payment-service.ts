@@ -261,4 +261,112 @@ export async function failPayment(paymentId: string, actorId?: string) {
     return failed;
   });
 }
+
+/**
+ * A member can cancel only an ONLINE command before a provider checkout order
+ * exists. Once an order exists, a capture may still arrive and must be handled
+ * through the provider/refund workflow rather than being silently discarded.
+ */
+export async function cancelPendingPayment(input: {
+  paymentExternalId: string;
+  memberId: string;
+  actorId: string;
+}) {
+  return runSerializablePaymentTransaction(async (tx) => {
+    const payment = await tx.payment.findFirst({
+      where: { externalId: input.paymentExternalId, memberId: input.memberId },
+      include: { due: true },
+    });
+    if (!payment) throw new Error("Payment not found");
+    if (payment.status === "CANCELLED") return payment;
+    if (payment.status !== "PENDING" || payment.method !== "ONLINE")
+      throw new Error("Payment cannot be cancelled");
+    if (payment.providerOrderId)
+      throw new Error("Checkout is already active; use the payment provider or Foundation support");
+
+    const cancelled = await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "CANCELLED" },
+    });
+    // A plan split may have already debited Foundation wallet credit while its
+    // online remainder was being opened. Cancelling that unstarted checkout
+    // must compensate the wallet exactly once and append a ledger debit.
+    if (
+      payment.due?.purpose === "PLAN_REGISTRATION" &&
+      payment.memberId &&
+      payment.idempotencyKey
+    ) {
+      const walletPayment = await tx.payment.findUnique({
+        where: { idempotencyKey: `${payment.idempotencyKey}:wallet` },
+      });
+      if (
+        walletPayment &&
+        walletPayment.status === "SUCCEEDED" &&
+        walletPayment.memberId === payment.memberId &&
+        walletPayment.dueId === payment.dueId
+      ) {
+        const wallet = await tx.wallet.findUnique({ where: { memberId: payment.memberId } });
+        if (!wallet) throw new Error("Wallet compensation could not be applied");
+        const priorCompensation = await tx.walletTransaction.findFirst({
+          where: {
+            walletId: wallet.id,
+            direction: "CREDIT",
+            purpose: "PLAN_REGISTRATION_WALLET_REFUND",
+            relatedExternalId: walletPayment.externalId,
+          },
+          select: { id: true },
+        });
+        if (!priorCompensation) {
+          const changed = await tx.wallet.updateMany({
+            where: { id: wallet.id, version: wallet.version },
+            data: {
+              balancePaise: { increment: walletPayment.amountPaise },
+              version: { increment: 1 },
+            },
+          });
+          if (changed.count !== 1) throw new Error("Wallet balance changed; retry cancellation");
+          const updated = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              direction: "CREDIT",
+              amountPaise: walletPayment.amountPaise,
+              balanceAfterPaise: updated.balancePaise,
+              purpose: "PLAN_REGISTRATION_WALLET_REFUND",
+              relatedExternalId: walletPayment.externalId,
+            },
+          });
+          await tx.foundationLedger.create({
+            data: {
+              direction: "DEBIT",
+              amountPaise: walletPayment.amountPaise,
+              purpose: "PLAN_REGISTRATION_WALLET_REFUND",
+              relatedExternalId: walletPayment.externalId,
+              authorizedActorId: input.actorId,
+              status: "SUCCEEDED",
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              actorId: input.actorId,
+              action: "PLAN_SPLIT_WALLET_REFUNDED",
+              entityType: "Payment",
+              entityId: walletPayment.id,
+              afterState: { cancelledOnlinePaymentId: payment.id },
+            },
+          });
+        }
+      }
+    }
+    await tx.auditLog.create({
+      data: {
+        actorId: input.actorId,
+        action: "PAYMENT_CANCELLED",
+        entityType: "Payment",
+        entityId: payment.id,
+      },
+    });
+    return cancelled;
+  });
+}
 export const opaquePaymentReference = (reference: string) => tokenHash(reference);

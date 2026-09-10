@@ -19,7 +19,7 @@ export async function selectContributionDue(input: { memberId: string; eventExte
         purpose: "CONTRIBUTION",
         status: { in: ["PENDING", "OVERDUE", "EXPIRED"] },
       },
-      select: { id: true, externalId: true },
+      select: { id: true, externalId: true, amountPaise: true },
     });
     if (!due) throw new Error("Contribution due is not payable");
     return due;
@@ -30,7 +30,7 @@ export async function selectContributionDue(input: { memberId: string; eventExte
       purpose: "CONTRIBUTION",
       status: { in: ["PENDING", "OVERDUE", "EXPIRED"] },
     },
-    select: { id: true, externalId: true },
+    select: { id: true, externalId: true, amountPaise: true },
     orderBy: [{ createdAt: "asc" }, { externalId: "asc" }],
   });
   if (!due) throw new Error("No payable contribution is available");

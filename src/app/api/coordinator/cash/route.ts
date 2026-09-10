@@ -7,6 +7,7 @@ const bodySchema = z.object({
   memberExternalId: z.string().uuid(),
   dueExternalId: z.string().uuid(),
   idempotencyKey: z.string().min(16).max(200),
+  method: z.enum(["CASH", "MANUAL"]).default("CASH"),
 });
 export async function POST(request: NextRequest) {
   try {

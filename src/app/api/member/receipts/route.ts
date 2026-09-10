@@ -12,11 +12,29 @@ export async function GET(request: NextRequest) {
       select: {
         receiptNumber: true,
         issuedAt: true,
-        payment: { select: { amountPaise: true, method: true, status: true } },
+        payment: {
+          select: {
+            amountPaise: true,
+            method: true,
+            status: true,
+            refund: { select: { status: true } },
+          },
+        },
       },
       orderBy: { issuedAt: "desc" },
     });
-    return NextResponse.json(receipts);
+    return NextResponse.json(
+      receipts.map((receipt) => ({
+        receiptNumber: receipt.receiptNumber,
+        issuedAt: receipt.issuedAt,
+        payment: {
+          amountPaise: receipt.payment.amountPaise,
+          method: receipt.payment.method,
+          status:
+            receipt.payment.refund?.status === "SUCCEEDED" ? "REFUNDED" : receipt.payment.status,
+        },
+      })),
+    );
   } catch {
     return NextResponse.json({ error: "Request denied" }, { status: 403 });
   }

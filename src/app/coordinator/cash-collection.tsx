@@ -23,7 +23,7 @@ export function CoordinatorCashCollection() {
   useEffect(() => {
     void load();
   }, []);
-  const recordCash = async (member: Member, due: Due) => {
+  const recordCollection = async (member: Member, due: Due, method: "CASH" | "MANUAL") => {
     const response = await fetch("/api/coordinator/cash", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -31,18 +31,19 @@ export function CoordinatorCashCollection() {
         memberExternalId: member.externalId,
         dueExternalId: due.externalId,
         idempotencyKey: crypto.randomUUID(),
+        method,
       }),
     });
     setMessage(
       response.ok
-        ? "Cash collection recorded. It now awaits Administrator verification."
-        : "Could not record cash collection.",
+        ? `${method === "CASH" ? "Cash collection" : "Manual payment"} recorded. It now awaits Administrator verification.`
+        : "Could not record this Coordinator payment.",
     );
     await load();
   };
   return (
     <article>
-      <h2>Assigned-member cash collections</h2>
+      <h2>Assigned-member payment collections</h2>
       <p>{message}</p>
       {members.length ? (
         members.map((member) => (
@@ -53,7 +54,12 @@ export function CoordinatorCashCollection() {
               member.dues.map((due) => (
                 <div key={due.externalId}>
                   {due.purpose} · {rupees(due.amountPaise)}{" "}
-                  <button onClick={() => recordCash(member, due)}>Record cash received</button>
+                  <button onClick={() => recordCollection(member, due, "CASH")}>
+                    Record cash received
+                  </button>
+                  <button onClick={() => recordCollection(member, due, "MANUAL")}>
+                    Record manual payment
+                  </button>
                 </div>
               ))
             ) : (

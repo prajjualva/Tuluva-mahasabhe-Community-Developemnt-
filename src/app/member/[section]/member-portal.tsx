@@ -34,6 +34,19 @@ type WalletActivity = {
   paymentExternalId: string | null;
   createdAt: string;
 };
+type ReceiptDetail = {
+  receiptNumber: string;
+  issuedAt: string;
+  payment: {
+    externalId: string;
+    amountPaise: number;
+    method: string;
+    status: string;
+    providerReference: string | null;
+    member: { externalId: string; fullName: string } | null;
+    due: { externalId: string; purpose: string } | null;
+  };
+};
 const money = (paise: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 const key = () => crypto.randomUUID();
@@ -68,9 +81,16 @@ export function MemberPortal({ section }: { section: string }) {
   const [wallet, setWallet] = useState<number>(0);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([]);
   const [payments, setPayments] = useState<
-    Array<{ externalId: string; amountPaise: number; status: string; method: string }>
+    Array<{
+      externalId: string;
+      amountPaise: number;
+      status: string;
+      method: string;
+      canCancel: boolean;
+    }>
   >([]);
   const [receipts, setReceipts] = useState<Array<{ receiptNumber: string; issuedAt: string }>>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptDetail | null>(null);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [message, setMessage] = useState("");
   const load = async () => {
@@ -178,14 +198,56 @@ export function MemberPortal({ section }: { section: string }) {
     );
     await load();
   };
+  const cancelPayment = async (paymentExternalId: string) => {
+    const result = await fetch(
+      `/api/member/payments/${encodeURIComponent(paymentExternalId)}/cancel`,
+      { method: "POST" },
+    );
+    const data = (await result.json()) as { error?: string };
+    setMessage(
+      result.ok
+        ? "Payment request cancelled. No Foundation payment was recorded."
+        : (data.error ?? "Payment could not be cancelled"),
+    );
+    await load();
+  };
   const viewReceipt = async (receiptNumber: string) => {
     const result = await fetch(`/api/member/receipts/${encodeURIComponent(receiptNumber)}`);
-    const receipt = await result.json();
+    const receipt = (await result.json()) as ReceiptDetail & { error?: string };
+    if (result.ok) setSelectedReceipt(receipt);
     setMessage(
       result.ok
         ? `Official receipt ${receipt.receiptNumber}: ${money(receipt.payment.amountPaise)} via ${receipt.payment.method}.`
         : (receipt.error ?? "Receipt not found"),
     );
+  };
+  const shareReceipt = async () => {
+    if (!selectedReceipt) return;
+    const text = [
+      "Community Support Foundation — Official payment receipt",
+      `Receipt: ${selectedReceipt.receiptNumber}`,
+      `Member: ${selectedReceipt.payment.member?.fullName ?? "Member"}`,
+      `Purpose: ${selectedReceipt.payment.due?.purpose ?? "Foundation payment"}`,
+      `Amount: ${money(selectedReceipt.payment.amountPaise)}`,
+      `Method: ${selectedReceipt.payment.method}`,
+      `Status: ${selectedReceipt.payment.status}`,
+      `Issued: ${new Date(selectedReceipt.issuedAt).toLocaleString()}`,
+      `Reference: ${selectedReceipt.payment.externalId}`,
+    ].join("\n");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: selectedReceipt.receiptNumber, text });
+        setMessage("Receipt share sheet opened.");
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setMessage("Receipt details copied. You can now paste them into a message.");
+      } else {
+        setMessage("Sharing is unavailable in this browser. Download the receipt instead.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setMessage("Receipt sharing could not be completed.");
+    }
   };
   return (
     <main>
@@ -290,6 +352,40 @@ export function MemberPortal({ section }: { section: string }) {
               <p>No receipts yet.</p>
             )}
           </article>
+          {selectedReceipt && (
+            <article aria-label="Official payment receipt">
+              <h2>Official receipt</h2>
+              <p>
+                <strong>{selectedReceipt.receiptNumber}</strong>
+              </p>
+              <p>Issued: {new Date(selectedReceipt.issuedAt).toLocaleString()}</p>
+              <p>Member: {selectedReceipt.payment.member?.fullName ?? "Member"}</p>
+              <p>
+                Member ID: <code>{selectedReceipt.payment.member?.externalId ?? "—"}</code>
+              </p>
+              <p>
+                {selectedReceipt.payment.due?.purpose ?? "Foundation payment"} ·{" "}
+                {money(selectedReceipt.payment.amountPaise)} · {selectedReceipt.payment.method}
+              </p>
+              <p>
+                Payment reference: <code>{selectedReceipt.payment.externalId}</code>
+              </p>
+              {selectedReceipt.payment.providerReference && (
+                <p>
+                  Provider reference: <code>{selectedReceipt.payment.providerReference}</code>
+                </p>
+              )}
+              <p>
+                <a
+                  href={`/api/member/receipts/${encodeURIComponent(selectedReceipt.receiptNumber)}/download`}
+                  download
+                >
+                  Download receipt
+                </a>{" "}
+                <button onClick={shareReceipt}>Share receipt</button>
+              </p>
+            </article>
+          )}
         </>
       )}
       {(section === "wallet" || section === "dashboard") && (
@@ -327,6 +423,9 @@ export function MemberPortal({ section }: { section: string }) {
           payments.map((payment) => (
             <p key={payment.externalId}>
               {payment.method} · {money(payment.amountPaise)} · {payment.status}
+              {payment.canCancel && (
+                <button onClick={() => cancelPayment(payment.externalId)}>Cancel payment</button>
+              )}
             </p>
           ))
         ) : (
