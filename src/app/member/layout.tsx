@@ -32,6 +32,11 @@ export default function MemberLayout({ children }: Readonly<{ children: React.Re
             </Link>
           ))}
         </nav>
+        <p>
+          <Link href="/death-support-events">Death Support Events</Link>
+          <br />
+          <Link href="/death-report">Report a death</Link>
+        </p>
         <SignOutButton />
       </aside>
       <section>{children}</section>

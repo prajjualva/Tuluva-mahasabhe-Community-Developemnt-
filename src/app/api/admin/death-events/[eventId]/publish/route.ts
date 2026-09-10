@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { publishDeathSupportEvent } from "../../../../../../server/death/death-workflow-service";
+import { requireApiPermission } from "../../../../../../server/http/authorize";
 
-/** Publishes an approved event and atomically creates its historical ₹100 obligations. */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
@@ -20,7 +19,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Request denied" },
+      { error: error instanceof Error ? error.message : "Death Support Event publication denied" },
       { status: 400 },
     );
   }

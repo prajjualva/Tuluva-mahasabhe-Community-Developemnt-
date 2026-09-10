@@ -35,11 +35,14 @@ export function contributionObligationMemberIds(
   members: readonly ObligationCandidate[],
   eventCreatedAt: Date,
   existingMemberIds: ReadonlySet<string> = new Set(),
+  excludedMemberId?: string | null,
 ) {
   return members
     .filter(
       (member) =>
-        member.joinedAt.getTime() <= eventCreatedAt.getTime() && !existingMemberIds.has(member.id),
+        member.joinedAt.getTime() <= eventCreatedAt.getTime() &&
+        !existingMemberIds.has(member.id) &&
+        member.id !== excludedMemberId,
     )
     .map((member) => member.id);
 }
@@ -67,10 +70,11 @@ export async function generateContributionDuesInTransaction(
       status: true,
       publishedAt: true,
       createdAt: true,
+      deathCase: { select: { memberId: true } },
     },
   });
   if (!event) throw new Error("Contribution event not found");
-  if (event.status !== "APPROVED")
+  if (!["APPROVED", "PUBLISHED"].includes(event.status))
     throw new Error("Contribution dues may only be generated for an approved event");
 
   // Publishing and obligation generation are atomically linked. The cutoff
@@ -82,15 +86,16 @@ export async function generateContributionDuesInTransaction(
   if (newlyPublished) {
     await tx.contributionEvent.update({
       where: { id: event.id },
-      data: { publishedAt },
+      data: { publishedAt, status: "PUBLISHED" },
     });
   }
 
-  // Do not filter by Member.status. Inactive members must receive the exact
-  // same obligation, and support eligibility deliberately is not joined here.
+  // Membership existence at event creation is the entire obligation rule:
+  // do not filter by current status or support eligibility here.
   const candidates = await tx.member.findMany({
     where: {
       joinedAt: { lte: event.createdAt },
+      ...(event.deathCase?.memberId ? { id: { not: event.deathCase.memberId } } : {}),
       contributions: { none: { eventId: event.id } },
     },
     select: { id: true, joinedAt: true },
@@ -98,7 +103,12 @@ export async function generateContributionDuesInTransaction(
   const dueAt = contributionDueDeadline(publishedAt);
   const dueExternalIds: string[] = [];
 
-  for (const memberId of contributionObligationMemberIds(candidates, event.createdAt)) {
+  for (const memberId of contributionObligationMemberIds(
+    candidates,
+    event.createdAt,
+    new Set(),
+    event.deathCase?.memberId,
+  )) {
     // Both rows are written in this same transaction. If the unique
     // Contribution(eventId, memberId) key collides during a concurrent replay,
     // the whole transaction rolls back and the outer retry rereads the event.

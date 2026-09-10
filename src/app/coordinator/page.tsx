@@ -1,5 +1,7 @@
 import { CoordinatorPlanQueue } from "./plan-queue";
 import { CoordinatorCashCollection } from "./cash-collection";
+import { CoordinatorDeathReportQueue } from "./death-report-queue";
+import { CoordinatorCommentModeration } from "./comment-moderation";
 import { requirePagePermission } from "../../server/http/page-authorize";
 const metrics = [
   "Assigned Members",
@@ -28,6 +30,8 @@ export default async function CoordinatorDashboard() {
         ))}
       </div>
       <CoordinatorPlanQueue />
+      <CoordinatorDeathReportQueue />
+      <CoordinatorCommentModeration />
       <CoordinatorCashCollection />
     </main>
   );

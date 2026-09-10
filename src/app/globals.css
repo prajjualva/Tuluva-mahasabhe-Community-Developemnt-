@@ -25,6 +25,9 @@ aside h1 {
 aside p {
   color: #b8d3c8;
 }
+aside p a {
+  color: #fff;
+}
 nav {
   display: grid;
   gap: 4px;
@@ -73,6 +76,132 @@ article p {
 }
 article strong {
   font-size: 1.12rem;
+}
+.workflow-form {
+  display: grid;
+  gap: 16px;
+  max-width: 760px;
+  margin: 24px 0;
+}
+.workflow-form fieldset {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #dce5df;
+  border-radius: 12px;
+  padding: 18px;
+}
+.workflow-form legend {
+  padding: 0 6px;
+  color: #35594e;
+  font-weight: 700;
+}
+label {
+  display: grid;
+  gap: 6px;
+  color: #29483f;
+  font-weight: 600;
+}
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #aac1b5;
+  border-radius: 7px;
+  background: #fff;
+  color: #132d28;
+  font: inherit;
+  padding: 10px;
+}
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+button {
+  width: fit-content;
+  border: 0;
+  border-radius: 7px;
+  background: #17674f;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  margin: 6px 6px 6px 0;
+  padding: 10px 14px;
+}
+button:hover:not(:disabled) {
+  background: #0f513d;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.selection-list {
+  display: grid;
+  gap: 10px;
+}
+.selection-card {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  border: 1px solid #dce5df;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+.selection-card input {
+  width: auto;
+  margin-top: 4px;
+}
+.selection-card em {
+  color: #8a3e10;
+  font-style: normal;
+  font-weight: 500;
+}
+.muted {
+  color: #587069;
+  font-size: 0.92rem;
+}
+.warning {
+  border-left: 3px solid #aa5a19;
+  color: #71421b;
+  padding-left: 10px;
+}
+.private-token {
+  border: 2px solid #aa5a19;
+  border-radius: 10px;
+  background: #fff9ed;
+  color: #51310d;
+  margin: 16px 0;
+  padding: 16px;
+}
+.private-token code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.evidence-follow-up {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+  margin: 16px 0;
+  padding: 16px;
+}
+.evidence-follow-up h2,
+.evidence-follow-up p {
+  margin: 0;
+}
+.queue-item,
+.comment {
+  border-top: 1px solid #dce5df;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+.comment p {
+  color: #132d28;
+}
+.comment small {
+  color: #587069;
 }
 @media (max-width: 700px) {
   .shell {

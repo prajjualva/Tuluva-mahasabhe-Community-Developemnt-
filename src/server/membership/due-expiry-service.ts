@@ -33,6 +33,15 @@ export async function processMembershipDueExpiry(now = new Date()) {
       )
         continue;
       await tx.member.update({ where: { id: memberId }, data: { status: "INACTIVE" } });
+      // Status-at-death decisions require durable history rather than a later
+      // Member.status snapshot. End any current period and append the change.
+      await tx.membership.updateMany({
+        where: { memberId, endedAt: null },
+        data: { endedAt: now },
+      });
+      await tx.membership.create({
+        data: { memberId, status: "INACTIVE", startedAt: now },
+      });
       await tx.auditLog.create({
         data: {
           actorRole: "SYSTEM",

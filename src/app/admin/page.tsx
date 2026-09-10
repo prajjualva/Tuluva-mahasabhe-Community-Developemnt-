@@ -3,6 +3,7 @@ import { AdminCashQueue } from "./cash-queue";
 import { AdminAuditFeed } from "./audit-feed";
 import { AdminWalletCredit } from "./wallet-credit";
 import { AdminPaymentRefunds } from "./payment-refunds";
+import { AdminDeathSupportQueue } from "./death-support-queue";
 import { requirePagePermission } from "../../server/http/page-authorize";
 const queues = [
   "Member status summary",
@@ -33,6 +34,7 @@ export default async function AdminDashboard() {
       <AdminCashQueue />
       <AdminWalletCredit />
       <AdminPaymentRefunds />
+      <AdminDeathSupportQueue />
       <AdminAuditFeed />
     </main>
   );

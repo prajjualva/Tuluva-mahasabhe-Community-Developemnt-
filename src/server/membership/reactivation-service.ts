@@ -23,6 +23,14 @@ export async function reactivateMembership(memberId: string, actorId: string) {
       where: { id: memberId },
       data: { status: "ACTIVE", closedAt: null },
     });
+    const reactivatedAt = new Date();
+    await tx.membership.updateMany({
+      where: { memberId, endedAt: null },
+      data: { endedAt: reactivatedAt },
+    });
+    await tx.membership.create({
+      data: { memberId, status: "ACTIVE", startedAt: reactivatedAt },
+    });
     await tx.auditLog.create({
       data: {
         actorId,
