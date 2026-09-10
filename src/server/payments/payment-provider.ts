@@ -28,6 +28,7 @@ export type VerifiedPaymentWebhook = {
   paymentExternalId: string;
   providerOrderId: string;
   providerReference: string;
+  occurredAt: Date;
   payload: Record<string, unknown>;
 };
 
@@ -71,6 +72,7 @@ const razorpayWebhookSchema = z.object({
       entity: z.object({
         id: z.string().min(1).max(200),
         order_id: z.string().min(1).max(200),
+        created_at: z.number().int().nonnegative().optional(),
         notes: z.record(z.unknown()).default({}),
       }),
     }),
@@ -178,6 +180,7 @@ export class RazorpayPaymentProvider implements PaymentProvider {
       paymentExternalId: externalIdFromNotes(entity.notes),
       providerOrderId: entity.order_id,
       providerReference: entity.id,
+      occurredAt: new Date((entity.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
       payload: parsed as Record<string, unknown>,
     };
   }

@@ -9,6 +9,11 @@ import { paymentCommandKey } from "../src/server/payments/idempotency";
 import { mayReadNomineeBankDetails } from "../src/server/auth/sensitive-access";
 import { issueOtp, OTP_EXPIRY_MS, verifyOtp } from "../src/server/auth/otp-service";
 import {
+  clientAddress,
+  loginThrottleKey,
+  registrationThrottleKey,
+} from "../src/server/auth/login-throttle";
+import {
   assertMemberAccess,
   canChangeCoordinator,
   registerMember,
@@ -106,6 +111,11 @@ describe("member registration and identity safety", () => {
 });
 
 describe("OTP and nominee safety", () => {
+  it("uses separate opaque throttles for sign-in and public registration", () => {
+    const ip = clientAddress(new Headers({ "x-forwarded-for": "203.0.113.15, proxy" }));
+    expect(ip).toBe("203.0.113.15");
+    expect(registrationThrottleKey(ip)).not.toBe(loginThrottleKey("member@example.test", ip));
+  });
   it("expires OTPs and rate limits issuance", () => {
     const issued = issueOtp("+919876543210", "LOGIN", "secret", 0);
     expect(() =>

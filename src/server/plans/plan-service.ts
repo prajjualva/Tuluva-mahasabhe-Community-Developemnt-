@@ -1,6 +1,6 @@
 import { Prisma, PlanStatus } from "@prisma/client";
 import { MONEY } from "../../domain/money";
-import { prisma } from "../database/prisma";
+import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
 
 const sixMonthsFrom = (from: Date) => {
   const result = new Date(from);
@@ -8,29 +8,34 @@ const sixMonthsFrom = (from: Date) => {
   return result;
 };
 
+export function canStartPlanRegistration(
+  membershipStatus: string,
+  hasExistingPlan: boolean,
+  hasPendingReopening: boolean,
+) {
+  return membershipStatus === "CLOSED" ? !hasPendingReopening : !hasExistingPlan;
+}
+
 export async function startPlanRegistration(memberId: string, actorId: string) {
-  return prisma.$transaction(async (tx) => {
+  return runSerializablePaymentTransaction(async (tx) => {
     const member = await tx.member.findUnique({
       where: { id: memberId },
       select: { status: true },
     });
     if (!member) throw new Error("Member not found");
-    const existing = await tx.communitySupportPlan.findFirst({
+    const existing = await tx.communitySupportPlan.findFirst({ where: { memberId } });
+    const pendingReopening = await tx.communitySupportPlan.findFirst({
       where: {
         memberId,
         status: {
-          in: [
-            "ACTIVE",
-            "PAYMENT_PENDING",
-            "PENDING_COORDINATOR_APPROVAL",
-            "PENDING_ADMIN_APPROVAL",
-          ],
+          in: ["PAYMENT_PENDING", "PENDING_COORDINATOR_APPROVAL", "PENDING_ADMIN_APPROVAL"],
         },
       },
     });
-    // A normal inactive member retains the prior plan. Only a CLOSED member
-    // begins a new ₹1,000 registration after reopening.
-    if (existing && member.status !== "CLOSED")
+    // A normal inactive member retains every prior plan and never pays a
+    // second ₹1,000. A CLOSED member may begin exactly one fresh reopening
+    // registration alongside their historical plan.
+    if (!canStartPlanRegistration(member.status, Boolean(existing), Boolean(pendingReopening)))
       throw new Error("A Community Support Plan already exists");
     const plan = await tx.communitySupportPlan.create({
       data: { memberId, status: "PAYMENT_PENDING" },
@@ -76,10 +81,10 @@ export async function approvePlan(
   actorId: string,
   stage: "COORDINATOR" | "ADMIN",
 ) {
-  return prisma.$transaction(async (tx) => {
+  return runSerializablePaymentTransaction(async (tx) => {
     const plan = await tx.communitySupportPlan.findUnique({
       where: { externalId: externalPlanId },
-      include: { member: { select: { coordinatorId: true } } },
+      include: { member: { select: { coordinatorId: true, status: true } } },
     });
     if (!plan) throw new Error("Plan not found");
     if (stage === "COORDINATOR") {
@@ -103,6 +108,24 @@ export async function approvePlan(
         where: { id: plan.id },
         data: { status: "ACTIVE", activatedAt: now, waitingEndsAt: sixMonthsFrom(now) },
       });
+      // CLOSED is deliberately different from ordinary INACTIVE reactivation:
+      // it becomes ACTIVE only after a brand-new ₹1,000 registration has made
+      // it through both approval stages.
+      if (plan.member.status === "CLOSED") {
+        await tx.member.update({
+          where: { id: plan.memberId },
+          data: { status: "ACTIVE", closedAt: null },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: "MEMBERSHIP_REOPENED_WITH_NEW_PLAN",
+            entityType: "Member",
+            entityId: plan.memberId,
+            afterState: { status: "ACTIVE", planId: plan.id },
+          },
+        });
+      }
     }
     const updated = await tx.communitySupportPlan.findUniqueOrThrow({ where: { id: plan.id } });
     await tx.auditLog.create({
@@ -126,11 +149,16 @@ export async function extendPlanDue(
 ) {
   if (!reason.trim() || dueAt <= new Date())
     throw new Error("A reason and future expiry are required");
-  return prisma.$transaction(async (tx) => {
+  return runSerializablePaymentTransaction(async (tx) => {
     const due = await tx.due.findUnique({ where: { externalId: externalDueId } });
     if (!due || due.purpose !== "PLAN_REGISTRATION" || due.status === "PAID")
       throw new Error("Plan registration due not found or already settled");
-    const updated = await tx.due.update({ where: { id: due.id }, data: { dueAt } });
+    // An extension is the explicit Admin authorization that makes an expired
+    // ₹1,000 obligation payable again; it also starts a fresh reminder cadence.
+    const updated = await tx.due.update({
+      where: { id: due.id },
+      data: { dueAt, status: "PENDING", lastReminderAt: null },
+    });
     await tx.auditLog.create({
       data: {
         actorId,
@@ -138,8 +166,8 @@ export async function extendPlanDue(
         entityType: "Due",
         entityId: due.id,
         reason: reason.trim(),
-        beforeState: { dueAt: due.dueAt.toISOString() },
-        afterState: { dueAt: updated.dueAt.toISOString() },
+        beforeState: { dueAt: due.dueAt.toISOString(), status: due.status },
+        afterState: { dueAt: updated.dueAt.toISOString(), status: updated.status },
       },
     });
     return updated;

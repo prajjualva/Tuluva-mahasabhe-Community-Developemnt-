@@ -480,9 +480,12 @@ model Payment {
   memberId          String?       @db.Uuid
   dueId             String?       @db.Uuid
   amountPaise       Int
-  method            PaymentMethod
-  status            PaymentStatus @default(PENDING)
-  providerReference String?       @unique
+    method            PaymentMethod
+    status            PaymentStatus @default(PENDING)
+    // The provider order is assigned before checkout. The captured payment
+    // reference is assigned only after a verified webhook settles it.
+    providerOrderId   String?       @unique
+    providerReference String?       @unique
   idempotencyKey    String        @unique
   receipt           Receipt?
   member            Member?       @relation(fields: [memberId], references: [id], onDelete: Restrict)
@@ -592,7 +595,7 @@ model CashCollection {
   externalId    String      @unique @default(uuid()) @db.Uuid
   coordinatorId String      @db.Uuid
   memberId      String      @db.Uuid
-  dueId         String      @unique @db.Uuid
+  dueId         String      @db.Uuid
   paymentId     String      @unique @db.Uuid
   amountPaise   Int
   receiptNumber String      @unique
@@ -600,6 +603,7 @@ model CashCollection {
   coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
   member        Member      @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
+  @@index([dueId, status])
   @@map("cash_collections")
 }
 

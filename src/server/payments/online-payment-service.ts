@@ -37,34 +37,34 @@ export async function createOnlineCheckout(input: {
   };
   const existing = await prisma.payment.findUnique({
     where: { id: input.paymentId },
-    select: { status: true, method: true, providerReference: true },
+    select: { status: true, method: true, providerOrderId: true },
   });
   if (!existing || existing.method !== "ONLINE" || existing.status !== "PENDING")
     throw new Error("Online checkout is no longer payable");
 
-  if (existing.providerReference)
+  if (existing.providerOrderId)
     return {
       available: true,
-      checkout: configured.provider.checkoutOrderFromExisting(intent, existing.providerReference),
+      checkout: configured.provider.checkoutOrderFromExisting(intent, existing.providerOrderId),
     };
 
   const checkout = await configured.provider.createCheckoutOrder(intent);
   // Do not overwrite a provider order created by a concurrent retry. Returning
   // the persisted order keeps the member on one checkout order per payment.
   const persisted = await prisma.payment.updateMany({
-    where: { id: input.paymentId, status: "PENDING", providerReference: null },
-    data: { providerReference: checkout.orderId },
+    where: { id: input.paymentId, status: "PENDING", providerOrderId: null },
+    data: { providerOrderId: checkout.orderId },
   });
   if (persisted.count === 1) return { available: true, checkout };
 
   const raced = await prisma.payment.findUnique({
     where: { id: input.paymentId },
-    select: { status: true, method: true, providerReference: true },
+    select: { status: true, method: true, providerOrderId: true },
   });
-  if (!raced || raced.method !== "ONLINE" || raced.status !== "PENDING" || !raced.providerReference)
+  if (!raced || raced.method !== "ONLINE" || raced.status !== "PENDING" || !raced.providerOrderId)
     throw new Error("Online checkout is no longer payable");
   return {
     available: true,
-    checkout: configured.provider.checkoutOrderFromExisting(intent, raced.providerReference),
+    checkout: configured.provider.checkoutOrderFromExisting(intent, raced.providerOrderId),
   };
 }

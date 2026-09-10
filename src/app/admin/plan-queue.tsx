@@ -64,6 +64,9 @@ export function AdminPlanQueue() {
             <div key={plan.externalId}>
               <strong>{plan.member.fullName}</strong>
               <p>Submitted {new Date(plan.createdAt).toLocaleDateString()}</p>
+              <p>
+                Member ID: <code>{plan.member.externalId}</code>
+              </p>
               <button onClick={() => approve(plan.externalId)}>Approve plan</button>
             </div>
           ))
@@ -78,6 +81,9 @@ export function AdminPlanQueue() {
             <div key={due.externalId}>
               <strong>{due.member.fullName}</strong>
               <p>Current deadline {new Date(due.dueAt).toLocaleDateString()}</p>
+              <p>
+                Member ID: <code>{due.member.externalId}</code>
+              </p>
               <button onClick={() => extend(due.externalId)}>Extend with reason</button>
             </div>
           ))

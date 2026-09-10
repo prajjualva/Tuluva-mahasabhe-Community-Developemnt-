@@ -109,6 +109,7 @@ describe("online payment-provider boundary", () => {
           entity: {
             id: "pay_real_gateway_123",
             order_id: "order_real_gateway_123",
+            created_at: 1_788_912_000,
             notes: { foundation_payment_external_id: paymentExternalId },
           },
         },
@@ -125,6 +126,7 @@ describe("online payment-provider boundary", () => {
       paymentExternalId,
       providerOrderId: "order_real_gateway_123",
       providerReference: "pay_real_gateway_123",
+      occurredAt: new Date("2026-09-09T00:00:00.000Z"),
     });
     expect(() => provider.verifyWebhook(rawBody, "not-a-valid-signature")).toThrow(
       PaymentProviderSignatureError,

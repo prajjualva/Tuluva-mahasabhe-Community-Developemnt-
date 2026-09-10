@@ -15,16 +15,11 @@ import {
 } from "../../../../server/payments/online-payment-service";
 import { PaymentProviderRequestError } from "../../../../server/payments/payment-provider";
 import { prisma } from "../../../../server/database/prisma";
-import { z } from "zod";
-const bodySchema = z.object({
-  dueId: z.string().uuid(),
-  idempotencyKey: z.string().min(16),
-  method: z.enum(["ONLINE", "WALLET", "CASH", "MANUAL"]),
-});
+import { memberPaymentRequestSchema } from "../../../../server/payments/member-payment-request";
 export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
-    const body = bodySchema.parse(await request.json());
+    const body = memberPaymentRequestSchema.parse(await request.json());
     const memberId = await memberIdForUser(principal.userId);
     const dueId = await dueIdForMemberExternal(memberId, body.dueId);
     if (body.method === "WALLET")

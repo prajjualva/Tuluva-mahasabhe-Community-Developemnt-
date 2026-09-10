@@ -7,6 +7,7 @@ type Due = {
   amountPaise: number;
   dueAt: string;
   status: string;
+  contributionEventExternalId: string | null;
 };
 type Plan = { externalId?: string; status: string; activatedAt?: string; waitingEndsAt?: string };
 type Membership = { status: string; joinedAt: string };
@@ -115,16 +116,15 @@ export function MemberPortal({ section }: { section: string }) {
     );
     await load();
   };
-  const pay = async (due: Due, method: "ONLINE" | "WALLET") => {
-    const result = await fetch("/api/member/payments", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dueId: due.externalId, method, idempotencyKey: key() }),
-    });
-    const data = await result.json();
+  const handlePaymentStart = async (
+    result: Response,
+    method: "ONLINE" | "WALLET",
+    walletSuccessMessage: string,
+  ) => {
+    const data = (await result.json()) as { checkout?: Checkout; error?: string };
     if (result.ok && data.checkout) {
       try {
-        await openGatewayCheckout(data.checkout as Checkout);
+        await openGatewayCheckout(data.checkout);
         setMessage(
           "Gateway checkout opened. Your payment will be confirmed only after the verified provider webhook arrives.",
         );
@@ -137,11 +137,37 @@ export function MemberPortal({ section }: { section: string }) {
     setMessage(
       result.ok
         ? method === "WALLET"
-          ? "Wallet payment settled and receipt issued."
+          ? walletSuccessMessage
           : "Online payment is awaiting the configured payment provider."
         : (data.error ?? "Payment could not be started"),
     );
     await load();
+  };
+  const pay = async (due: Due, method: "ONLINE" | "WALLET") => {
+    const result = await fetch("/api/member/payments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dueId: due.externalId, method, idempotencyKey: key() }),
+    });
+    await handlePaymentStart(result, method, "Wallet payment settled and receipt issued.");
+  };
+  const payContribution = async (method: "ONLINE" | "WALLET", eventExternalId?: string) => {
+    const result = await fetch("/api/member/contributions/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        method,
+        idempotencyKey: key(),
+        ...(eventExternalId ? { eventExternalId } : {}),
+      }),
+    });
+    await handlePaymentStart(
+      result,
+      method,
+      eventExternalId
+        ? "Selected contribution paid from wallet and receipt issued."
+        : "Oldest outstanding contribution paid from wallet and receipt issued.",
+    );
   };
   const reactivate = async () => {
     const result = await fetch("/api/member/membership/reactivate", { method: "POST" });
@@ -202,13 +228,49 @@ export function MemberPortal({ section }: { section: string }) {
         <>
           <article>
             <h2>Payable dues</h2>
+            {dues.some((due) => due.purpose === "CONTRIBUTION") && (
+              <section aria-label="Contribution payment options">
+                <h3>₹100 contribution payment</h3>
+                <p>FIFO payment settles your oldest outstanding contribution first.</p>
+                <button onClick={() => payContribution("WALLET")}>Pay oldest from wallet</button>
+                <button onClick={() => payContribution("ONLINE")}>Pay oldest online</button>
+              </section>
+            )}
             {dues.length ? (
               dues.map((due) => (
                 <div key={due.externalId}>
                   <strong>{due.purpose}</strong> — {money(due.amountPaise)} due{" "}
                   {new Date(due.dueAt).toLocaleDateString()}{" "}
-                  <button onClick={() => pay(due, "WALLET")}>Pay from wallet</button>
-                  <button onClick={() => pay(due, "ONLINE")}>Pay online</button>
+                  {due.purpose === "CONTRIBUTION" ? (
+                    due.contributionEventExternalId ? (
+                      <>
+                        <p>
+                          Death Support Event: <code>{due.contributionEventExternalId}</code>
+                        </p>
+                        <button
+                          onClick={() =>
+                            payContribution("WALLET", due.contributionEventExternalId ?? undefined)
+                          }
+                        >
+                          Pay this event from wallet
+                        </button>
+                        <button
+                          onClick={() =>
+                            payContribution("ONLINE", due.contributionEventExternalId ?? undefined)
+                          }
+                        >
+                          Pay this event online
+                        </button>
+                      </>
+                    ) : (
+                      <p>Event details are unavailable. You can still use FIFO payment above.</p>
+                    )
+                  ) : (
+                    <>
+                      <button onClick={() => pay(due, "WALLET")}>Pay from wallet</button>
+                      <button onClick={() => pay(due, "ONLINE")}>Pay online</button>
+                    </>
+                  )}
                 </div>
               ))
             ) : (

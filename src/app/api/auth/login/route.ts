@@ -5,9 +5,11 @@ import { verifyPassword } from "../../../../server/auth/password";
 import { persistSession, signAccessToken } from "../../../../server/auth/session";
 import {
   assertLoginAllowed,
+  clientAddress,
   clearLoginFailures,
   loginThrottleKey,
   recordLoginFailure,
+  ThrottleError,
 } from "../../../../server/auth/login-throttle";
 
 const bodySchema = z.object({
@@ -18,10 +20,7 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = bodySchema.parse(await request.json());
-    const key = loginThrottleKey(
-      body.email,
-      request.headers.get("x-forwarded-for")?.split(",")[0] ?? "local",
-    );
+    const key = loginThrottleKey(body.email, clientAddress(request.headers));
     await assertLoginAllowed(key);
     const user = await prisma.user.findUnique({
       where: { email: body.email.toLowerCase() },
@@ -49,7 +48,9 @@ export async function POST(request: NextRequest) {
       maxAge: 15 * 60,
     });
     return response;
-  } catch {
+  } catch (error) {
+    if (error instanceof ThrottleError)
+      return NextResponse.json({ error: error.message }, { status: 429 });
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 }

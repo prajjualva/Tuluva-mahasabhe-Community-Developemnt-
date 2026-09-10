@@ -12,6 +12,7 @@ import {
   onlinePaymentAvailability,
 } from "../../../../../server/payments/online-payment-service";
 import { PaymentProviderRequestError } from "../../../../../server/payments/payment-provider";
+import { prisma } from "../../../../../server/database/prisma";
 
 const bodySchema = z.object({
   eventExternalId: z.string().uuid().optional(),
@@ -33,6 +34,54 @@ export async function POST(request: NextRequest) {
         );
     }
     const memberId = await memberIdForUser(principal.userId);
+    // Resolve an idempotent replay before selecting an outstanding due: a
+    // successful first request will already have marked that contribution PAID.
+    const existing = await prisma.payment.findUnique({
+      where: { idempotencyKey: body.idempotencyKey },
+      select: {
+        id: true,
+        externalId: true,
+        memberId: true,
+        dueId: true,
+        method: true,
+        status: true,
+        amountPaise: true,
+        due: { select: { externalId: true, purpose: true } },
+      },
+    });
+    if (existing) {
+      if (
+        existing.memberId !== memberId ||
+        existing.method !== body.method ||
+        existing.due?.purpose !== "CONTRIBUTION"
+      )
+        throw new Error("Idempotency key is already in use");
+      if (existing.method === "ONLINE" && existing.status === "PENDING") {
+        const checkout = await createOnlineCheckout({
+          paymentId: existing.id,
+          paymentExternalId: existing.externalId,
+          amountPaise: existing.amountPaise,
+          idempotencyKey: body.idempotencyKey,
+          purpose: "CONTRIBUTION",
+        });
+        if (!checkout.available)
+          return NextResponse.json(
+            { error: "Online payments are not configured", code: "ONLINE_PAYMENT_UNAVAILABLE" },
+            { status: 503 },
+          );
+        return NextResponse.json({
+          externalId: existing.externalId,
+          status: existing.status,
+          dueExternalId: existing.due?.externalId,
+          checkout: checkout.checkout,
+        });
+      }
+      return NextResponse.json({
+        externalId: existing.externalId,
+        status: existing.status,
+        dueExternalId: existing.due?.externalId,
+      });
+    }
     const due = await selectContributionDue({ memberId, eventExternalId: body.eventExternalId });
     if (body.method === "WALLET") {
       const settled = await payDueFromWallet(

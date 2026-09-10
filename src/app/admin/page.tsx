@@ -1,6 +1,7 @@
 import { AdminPlanQueue } from "./plan-queue";
 import { AdminCashQueue } from "./cash-queue";
 import { AdminAuditFeed } from "./audit-feed";
+import { AdminWalletCredit } from "./wallet-credit";
 const queues = [
   "Member status summary",
   "Coordinator management",
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
       </div>
       <AdminPlanQueue />
       <AdminCashQueue />
+      <AdminWalletCredit />
       <AdminAuditFeed />
     </main>
   );

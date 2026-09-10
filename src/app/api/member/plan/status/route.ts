@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const memberId = await memberIdForUser(principal.userId);
     const plan = await prisma.communitySupportPlan.findFirst({
       where: { memberId },
-      orderBy: { activatedAt: "desc" },
+      orderBy: { createdAt: "desc" },
       select: {
         externalId: true,
         status: true,

@@ -38,19 +38,19 @@ export async function POST(
 
     const payment = await prisma.payment.findUnique({
       where: { externalId: webhook.paymentExternalId },
-      select: { id: true, method: true, providerReference: true },
+      select: { id: true, method: true, providerOrderId: true },
     });
     // The verified provider order must belong to the exact Foundation payment;
     // provider-supplied notes alone are not enough to authorize settlement.
     if (
       !payment ||
       payment.method !== "ONLINE" ||
-      payment.providerReference !== webhook.providerOrderId
+      payment.providerOrderId !== webhook.providerOrderId
     )
       return NextResponse.json({ error: "Unknown online payment order" }, { status: 400 });
 
     if (webhook.type === "PAYMENT_SUCCEEDED")
-      await settlePayment(payment.id, undefined, webhook.providerReference);
+      await settlePayment(payment.id, undefined, webhook.providerReference, webhook.occurredAt);
     else await failPayment(payment.id);
     await completeWebhook(webhook.provider, webhook.providerEventId);
     return NextResponse.json({ accepted: true });
