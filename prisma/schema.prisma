@@ -46,7 +46,9 @@ enum DeathCaseStatus {
   CANCELLED
 }
 
-/** The event is a separate public record from the private death report. */
+/**
+ * The event is a separate public record from the private death report.
+ */
 enum DeathEventStatus {
   APPROVED
   PUBLISHED
@@ -54,7 +56,9 @@ enum DeathEventStatus {
   CANCELLED
 }
 
-/** Preliminary support eligibility is deliberately independent of contribution obligations. */
+/**
+ * Preliminary support eligibility is deliberately independent of contribution obligations.
+ */
 enum DeathEligibilityStatus {
   PENDING
   ELIGIBLE
@@ -107,6 +111,26 @@ enum PaymentStatus {
   FAILED
   CANCELLED
   REFUNDED
+}
+
+/**
+ * Support payment is deliberately a lifecycle separate from the private death
+ * report and the public Death Support Event.  Reusing DeathCaseStatus here
+ * made it too easy to accidentally treat a public notice as a paid payout.
+ */
+enum SupportCaseStatus {
+  REVIEW
+  APPROVED
+  PAYMENT_PENDING
+  PAYMENT_FAILED
+  PAID
+  REJECTED
+  FROZEN_DISPUTE
+}
+
+enum SupportDisputeStatus {
+  OPEN
+  RESOLVED
 }
 
 enum RefundStatus {
@@ -395,6 +419,7 @@ model CommunitySupportPlan {
 
 model Nominee {
   id                      String                @id @default(uuid()) @db.Uuid
+  externalId              String                @unique @default(uuid()) @db.Uuid
   memberId                String                @db.Uuid
   kind                    String
   fullName                String
@@ -408,7 +433,8 @@ model Nominee {
   member                  Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
   verifications           NomineeVerification[]
   documents               NomineeDocument[]
-  verifiedDeathCases      DeathCase[]            @relation("DeathCaseVerifiedNominee")
+  verifiedDeathCases      DeathCase[]           @relation("DeathCaseVerifiedNominee")
+  supportCases            SupportCase[]         @relation("SupportCaseNominee")
 
   @@index([memberId, status])
   @@map("nominees")
@@ -437,33 +463,33 @@ model NomineeDocument {
 }
 
 model DeathCase {
-  id                      String                 @id @default(uuid()) @db.Uuid
-  externalId              String                 @unique @default(uuid()) @db.Uuid
-  memberId                String?                @db.Uuid
-  reporterIdentity        String
-  reporterAccessTokenHash String?                @unique
-  placeOfDeath            String
-  dateOfDeath             DateTime
-  details                 String?
-  status                  DeathCaseStatus        @default(REPORTED)
-  requiresAdminReview     Boolean                @default(false)
-  eligibilityStatus       DeathEligibilityStatus @default(PENDING)
-  eligibilityReason       String?
-  verifiedNomineeId       String?                @db.Uuid
-  coordinatorConfirmedAt  DateTime?
-  coordinatorConfirmedById String?               @db.Uuid
-  adminVerifiedAt         DateTime?
-  adminVerifiedById       String?                @db.Uuid
-  approvedAt              DateTime?
-  rejectedAt              DateTime?
-  rejectionReason         String?
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
-  member                  Member?                @relation("SubjectMember", fields: [memberId], references: [id], onDelete: Restrict)
-  verifiedNominee         Nominee?               @relation("DeathCaseVerifiedNominee", fields: [verifiedNomineeId], references: [id], onDelete: Restrict)
-  documents               DeathDocument[]
-  event                   ContributionEvent?
-  supportCase             SupportCase?
+  id                       String                 @id @default(uuid()) @db.Uuid
+  externalId               String                 @unique @default(uuid()) @db.Uuid
+  memberId                 String?                @db.Uuid
+  reporterIdentity         String
+  reporterAccessTokenHash  String?                @unique
+  placeOfDeath             String
+  dateOfDeath              DateTime
+  details                  String?
+  status                   DeathCaseStatus        @default(REPORTED)
+  requiresAdminReview      Boolean                @default(false)
+  eligibilityStatus        DeathEligibilityStatus @default(PENDING)
+  eligibilityReason        String?
+  verifiedNomineeId        String?                @db.Uuid
+  coordinatorConfirmedAt   DateTime?
+  coordinatorConfirmedById String?                @db.Uuid
+  adminVerifiedAt          DateTime?
+  adminVerifiedById        String?                @db.Uuid
+  approvedAt               DateTime?
+  rejectedAt               DateTime?
+  rejectionReason          String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  member                   Member?                @relation("SubjectMember", fields: [memberId], references: [id], onDelete: Restrict)
+  verifiedNominee          Nominee?               @relation("DeathCaseVerifiedNominee", fields: [verifiedNomineeId], references: [id], onDelete: Restrict)
+  documents                DeathDocument[]
+  event                    ContributionEvent?
+  supportCase              SupportCase?
 
   @@index([memberId, status, createdAt])
   @@index([status, requiresAdminReview, createdAt])
@@ -471,44 +497,45 @@ model DeathCase {
 }
 
 model DeathDocument {
-  id               String    @id @default(uuid()) @db.Uuid
-  externalId       String    @unique @default(uuid()) @db.Uuid
-  deathCaseId      String    @db.Uuid
-  storageKey       String    @unique
-  contentType      String
-  originalFilename String
-  sizeBytes        Int
-  sensitivity      String    @default("RESTRICTED")
-  uploadedAt       DateTime  @default(now())
-  deathCase        DeathCase @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  id                   String                        @id @default(uuid()) @db.Uuid
+  externalId           String                        @unique @default(uuid()) @db.Uuid
+  deathCaseId          String                        @db.Uuid
+  storageKey           String                        @unique
+  contentType          String
+  originalFilename     String
+  sizeBytes            Int
+  sensitivity          String                        @default("RESTRICTED")
+  uploadedAt           DateTime                      @default(now())
+  deathCase            DeathCase                     @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  supportVerifications SupportDocumentVerification[]
 
   @@index([deathCaseId, uploadedAt])
   @@map("death_documents")
 }
 
 model ContributionEvent {
-  id            String           @id @default(uuid()) @db.Uuid
-  externalId    String           @unique @default(uuid()) @db.Uuid
-  deathCaseId   String           @unique @db.Uuid
-  publishedAt   DateTime?
+  id                 String                         @id @default(uuid()) @db.Uuid
+  externalId         String                         @unique @default(uuid()) @db.Uuid
+  deathCaseId        String                         @unique @db.Uuid
+  publishedAt        DateTime?
   // This is the historical cutoff for contribution obligations. A member who
   // joined after this instant must never receive a due for this event.
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  status        DeathEventStatus @default(APPROVED)
-  publicDetails String?
-  approvedAt    DateTime?
-  approvedById  String?          @db.Uuid
-  publishedById String?          @db.Uuid
-  closedAt      DateTime?
-  closedById    String?          @db.Uuid
-  cancelledAt   DateTime?
-  cancelledById String?          @db.Uuid
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
+  status             DeathEventStatus               @default(APPROVED)
+  publicDetails      String?
+  approvedAt         DateTime?
+  approvedById       String?                        @db.Uuid
+  publishedById      String?                        @db.Uuid
+  closedAt           DateTime?
+  closedById         String?                        @db.Uuid
+  cancelledAt        DateTime?
+  cancelledById      String?                        @db.Uuid
   cancellationReason String?
-  deathCase     DeathCase        @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
-  contributions Contribution[]
-  comments      Comment[]
-  cancellation  ContributionEventCancellation?
+  deathCase          DeathCase                      @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  contributions      Contribution[]
+  comments           Comment[]
+  cancellation       ContributionEventCancellation?
 
   @@index([status, publishedAt])
   @@map("contribution_events")
@@ -549,24 +576,24 @@ model Due {
 }
 
 model Payment {
-  id                String         @id @default(uuid()) @db.Uuid
-  externalId        String         @unique @default(uuid()) @db.Uuid
-  memberId          String?        @db.Uuid
-  dueId             String?        @db.Uuid
+  id                String                     @id @default(uuid()) @db.Uuid
+  externalId        String                     @unique @default(uuid()) @db.Uuid
+  memberId          String?                    @db.Uuid
+  dueId             String?                    @db.Uuid
   amountPaise       Int
   method            PaymentMethod
-  status            PaymentStatus  @default(PENDING)
+  status            PaymentStatus              @default(PENDING)
   // The provider order is assigned before checkout. The captured payment
   // reference is assigned only after a verified webhook settles it.
-  providerOrderId   String?        @unique
-  providerReference String?        @unique
-  idempotencyKey    String         @unique
+  providerOrderId   String?                    @unique
+  providerReference String?                    @unique
+  idempotencyKey    String                     @unique
   receipt           Receipt?
   refund            PaymentRefund?
   eventReversal     ContributionEventReversal?
-  member            Member?        @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  due               Due?           @relation(fields: [dueId], references: [id], onDelete: Restrict)
-  createdAt         DateTime       @default(now())
+  member            Member?                    @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  due               Due?                       @relation(fields: [dueId], references: [id], onDelete: Restrict)
+  createdAt         DateTime                   @default(now())
 
   @@index([status, createdAt])
   @@map("payments")
@@ -608,19 +635,19 @@ model Receipt {
  * matching debit ledger entry show the reversal instead of overwriting them.
  */
 model PaymentRefund {
-  id                String        @id @default(uuid()) @db.Uuid
-  externalId        String        @unique @default(uuid()) @db.Uuid
-  paymentId         String        @unique @db.Uuid
+  id                String                     @id @default(uuid()) @db.Uuid
+  externalId        String                     @unique @default(uuid()) @db.Uuid
+  paymentId         String                     @unique @db.Uuid
   amountPaise       Int
   method            PaymentMethod
-  status            RefundStatus  @default(PENDING)
+  status            RefundStatus               @default(PENDING)
   reason            String
-  providerReference String?       @unique
-  idempotencyKey    String        @unique
-  authorizedActorId String?       @db.Uuid
+  providerReference String?                    @unique
+  idempotencyKey    String                     @unique
+  authorizedActorId String?                    @db.Uuid
   completedAt       DateTime?
-  createdAt         DateTime      @default(now())
-  payment           Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  createdAt         DateTime                   @default(now())
+  payment           Payment                    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   eventReversal     ContributionEventReversal?
 
   @@index([status, createdAt])
@@ -654,26 +681,99 @@ model WalletTransaction {
 }
 
 model SupportCase {
-  id              String           @id @default(uuid()) @db.Uuid
-  deathCaseId     String           @unique @db.Uuid
-  nomineeId       String?          @db.Uuid
-  status          DeathCaseStatus  @default(SUPPORT_PAYMENT_PENDING)
-  exceptionReason String?
-  deathCase       DeathCase        @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
-  payments        SupportPayment[]
+  id                     String                        @id @default(uuid()) @db.Uuid
+  externalId             String                        @unique @default(uuid()) @db.Uuid
+  deathCaseId            String                        @unique @db.Uuid
+  nomineeId              String?                       @db.Uuid
+  amountPaise            Int
+  status                 SupportCaseStatus             @default(REVIEW)
+  eligibilitySnapshot    Json?
+  exceptionReason        String?
+  nomineeSelectionReason String?
+  nomineeVerifiedAt      DateTime?
+  nomineeVerifiedById    String?                       @db.Uuid
+  bankVerifiedAt         DateTime?
+  bankVerifiedById       String?                       @db.Uuid
+  documentsVerifiedAt    DateTime?
+  documentsVerifiedById  String?                       @db.Uuid
+  approvedAt             DateTime?
+  approvedById           String?                       @db.Uuid
+  rejectedAt             DateTime?
+  rejectedById           String?                       @db.Uuid
+  rejectionReason        String?
+  frozenAt               DateTime?
+  statusBeforeFreeze     SupportCaseStatus?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  deathCase              DeathCase                     @relation(fields: [deathCaseId], references: [id], onDelete: Restrict)
+  nominee                Nominee?                      @relation("SupportCaseNominee", fields: [nomineeId], references: [id], onDelete: Restrict)
+  payments               SupportPayment[]
+  disputes               SupportDispute[]
+  documentVerifications  SupportDocumentVerification[]
 
+  @@index([status, createdAt])
+  @@index([nomineeId])
   @@map("support_cases")
 }
 
 model SupportPayment {
   id                String        @id @default(uuid()) @db.Uuid
+  externalId        String        @unique @default(uuid()) @db.Uuid
   supportCaseId     String        @db.Uuid
   amountPaise       Int
   status            PaymentStatus @default(PENDING)
+  method            String        @default("MANUAL_BANK_TRANSFER")
+  providerName      String?
+  // The database migration enforces uniqueness for non-null references with
+  // a partial index. Prisma cannot model that PostgreSQL index directly.
   providerReference String?
+  idempotencyKey    String        @unique
+  failureReason     String?
+  initiatedById     String?       @db.Uuid
+  initiatedAt       DateTime      @default(now())
+  settledAt         DateTime?
   supportCase       SupportCase   @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
 
+  @@index([supportCaseId, status, initiatedAt])
   @@map("support_payments")
+}
+
+/**
+ * An append-oriented payment freeze and resolution record.
+ */
+model SupportDispute {
+  id            String               @id @default(uuid()) @db.Uuid
+  externalId    String               @unique @default(uuid()) @db.Uuid
+  supportCaseId String               @db.Uuid
+  status        SupportDisputeStatus @default(OPEN)
+  reason        String
+  openedById    String?              @db.Uuid
+  openedAt      DateTime             @default(now())
+  resolvedById  String?              @db.Uuid
+  resolvedAt    DateTime?
+  resolution    String?
+  supportCase   SupportCase          @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+
+  @@index([supportCaseId, status, openedAt])
+  @@map("support_disputes")
+}
+
+/**
+ * The verification rows preserve which restricted death-document metadata an
+ * Administrator reviewed without copying the document or its opaque key.
+ */
+model SupportDocumentVerification {
+  id              String        @id @default(uuid()) @db.Uuid
+  supportCaseId   String        @db.Uuid
+  deathDocumentId String        @db.Uuid
+  verifiedById    String?       @db.Uuid
+  verifiedAt      DateTime      @default(now())
+  supportCase     SupportCase   @relation(fields: [supportCaseId], references: [id], onDelete: Restrict)
+  deathDocument   DeathDocument @relation(fields: [deathDocumentId], references: [id], onDelete: Restrict)
+
+  @@unique([supportCaseId, deathDocumentId])
+  @@index([supportCaseId, verifiedAt])
+  @@map("support_document_verifications")
 }
 
 model FoundationLedger {
@@ -753,19 +853,19 @@ model CommunityNews {
 }
 
 model Comment {
-  id               String        @id @default(uuid()) @db.Uuid
-  externalId       String        @unique @default(uuid()) @db.Uuid
-  eventId          String        @db.Uuid
-  userId           String        @db.Uuid
+  id               String            @id @default(uuid()) @db.Uuid
+  externalId       String            @unique @default(uuid()) @db.Uuid
+  eventId          String            @db.Uuid
+  userId           String            @db.Uuid
   body             String
-  status           CommentStatus @default(PUBLISHED)
+  status           CommentStatus     @default(PUBLISHED)
   moderatedAt      DateTime?
-  moderatedById    String?       @db.Uuid
+  moderatedById    String?           @db.Uuid
   moderationReason String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   event            ContributionEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
-  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([eventId, status, createdAt])
   @@map("comments")
@@ -776,35 +876,35 @@ model Comment {
  * one compensating result per already settled contribution payment.
  */
 model ContributionEventCancellation {
-  id               String                          @id @default(uuid()) @db.Uuid
-  externalId       String                          @unique @default(uuid()) @db.Uuid
-  eventId          String                          @unique @db.Uuid
+  id               String                            @id @default(uuid()) @db.Uuid
+  externalId       String                            @unique @default(uuid()) @db.Uuid
+  eventId          String                            @unique @db.Uuid
   settlementMethod EventCancellationSettlementMethod
   reason           String
-  actorId          String                          @db.Uuid
-  createdAt        DateTime                        @default(now())
-  event            ContributionEvent               @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  actorId          String                            @db.Uuid
+  createdAt        DateTime                          @default(now())
+  event            ContributionEvent                 @relation(fields: [eventId], references: [id], onDelete: Restrict)
   reversals        ContributionEventReversal[]
 
   @@map("contribution_event_cancellations")
 }
 
 model ContributionEventReversal {
-  id             String                          @id @default(uuid()) @db.Uuid
-  externalId     String                          @unique @default(uuid()) @db.Uuid
-  cancellationId String                          @db.Uuid
-  paymentId      String                          @unique @db.Uuid
-  refundId       String?                         @unique @db.Uuid
-  memberId       String                          @db.Uuid
+  id             String                            @id @default(uuid()) @db.Uuid
+  externalId     String                            @unique @default(uuid()) @db.Uuid
+  cancellationId String                            @db.Uuid
+  paymentId      String                            @unique @db.Uuid
+  refundId       String?                           @unique @db.Uuid
+  memberId       String                            @db.Uuid
   amountPaise    Int
   method         EventCancellationSettlementMethod
-  status         EventContributionReversalStatus @default(PENDING)
+  status         EventContributionReversalStatus   @default(PENDING)
   failureReason  String?
   completedAt    DateTime?
-  createdAt      DateTime                        @default(now())
-  cancellation   ContributionEventCancellation   @relation(fields: [cancellationId], references: [id], onDelete: Restrict)
-  payment        Payment                         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  refund         PaymentRefund?                  @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  createdAt      DateTime                          @default(now())
+  cancellation   ContributionEventCancellation     @relation(fields: [cancellationId], references: [id], onDelete: Restrict)
+  payment        Payment                           @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  refund         PaymentRefund?                    @relation(fields: [refundId], references: [id], onDelete: Restrict)
 
   @@index([cancellationId, status])
   @@map("contribution_event_reversals")

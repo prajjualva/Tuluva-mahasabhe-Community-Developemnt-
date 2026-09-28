@@ -4,6 +4,7 @@ import { AdminAuditFeed } from "./audit-feed";
 import { AdminWalletCredit } from "./wallet-credit";
 import { AdminPaymentRefunds } from "./payment-refunds";
 import { AdminDeathSupportQueue } from "./death-support-queue";
+import { AdminSupportPaymentQueue } from "./support-payment-queue";
 import { requirePagePermission } from "../../server/http/page-authorize";
 const queues = [
   "Member status summary",
@@ -35,6 +36,7 @@ export default async function AdminDashboard() {
       <AdminWalletCredit />
       <AdminPaymentRefunds />
       <AdminDeathSupportQueue />
+      <AdminSupportPaymentQueue />
       <AdminAuditFeed />
     </main>
   );
