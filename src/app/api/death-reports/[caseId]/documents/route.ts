@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import {
   clientAddress,
@@ -46,7 +47,7 @@ export async function POST(
     if (error instanceof ThrottleError)
       return NextResponse.json({ error: error.message }, { status: 429 });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Evidence upload denied" },
+      { error: publicErrorMessage(error, "Evidence upload denied") },
       { status: 400 },
     );
   }

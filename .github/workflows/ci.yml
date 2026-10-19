@@ -3,12 +3,36 @@ on: [push, pull_request]
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: foundation_test
+          POSTGRES_PASSWORD: isolated_ci_only
+          POSTGRES_DB: foundation_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U foundation_test -d foundation_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://foundation_test:isolated_ci_only@localhost:5432/foundation_test?schema=public
+      AUTH_SECRET: isolated-ci-auth-secret-not-for-production-0001
+      BANK_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      UPLOAD_STORAGE: local
+      UPLOAD_LOCAL_PATH: ./uploads-ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: npm }
       - run: npm ci
       - run: npm run db:generate
-      - run: npm run test
+      - run: npx prisma validate
+      - run: npm run db:deploy
+      - run: npm run db:seed
+      - run: npm run format:check
+      - run: npx tsc --noEmit
+      - run: npm run test -- --maxWorkers=1
+        env:
+          RUN_DB_INTEGRATION_TESTS: "1"
       - run: npm run lint
       - run: npm run build

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
@@ -22,7 +23,7 @@ export async function POST(
     return NextResponse.json({ externalId: refund.externalId, status: refund.status });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Refund could not be recorded" },
+      { error: publicErrorMessage(error, "Refund could not be recorded") },
       { status: 400 },
     );
   }

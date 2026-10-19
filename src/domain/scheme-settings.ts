@@ -1,6 +1,7 @@
 export const SCHEME_DEFAULTS = Object.freeze({
   annualMembershipFeePaise: 36900,
   planRegistrationFeePaise: 100000,
+  planPaymentDueDays: 30,
   deathContributionPaise: 10000,
   supportPaymentPaise: 10000000,
   initialWaitingMonths: 6,
@@ -9,6 +10,7 @@ export const SCHEME_DEFAULTS = Object.freeze({
   reminderIntervalDays: 5,
   inactiveExpiredDuesThreshold: 6,
   closedInactiveMonths: 12,
+  cashDiscrepancyResolutionDays: 30,
 });
 export type SchemeSettings = typeof SCHEME_DEFAULTS;
 export const settingKeys = Object.keys(SCHEME_DEFAULTS) as (keyof SchemeSettings)[];

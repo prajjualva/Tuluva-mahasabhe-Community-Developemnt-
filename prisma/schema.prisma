@@ -196,6 +196,8 @@ model User {
   otpChallenges    OtpChallenge[]
   passwordResets   PasswordReset[]
   comments         Comment[]
+  newsComments     NewsComment[]
+  notifications    Notification[]
 
   @@map("users")
 }
@@ -216,6 +218,7 @@ model AuthSession {
 
 model OtpChallenge {
   id          String    @id @default(uuid()) @db.Uuid
+  externalId  String    @unique @default(uuid()) @db.Uuid
   userId      String?   @db.Uuid
   destination String
   purpose     String
@@ -294,30 +297,31 @@ model UserRole {
 }
 
 model Member {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  externalId         String                 @unique @default(uuid()) @db.Uuid
-  userId             String                 @unique @db.Uuid
-  coordinatorId      String?                @db.Uuid
-  fullName           String
-  address            String
-  status             MembershipStatus       @default(ACTIVE)
-  joinedAt           DateTime               @default(now())
-  closedAt           DateTime?
-  deceasedAt         DateTime?
-  user               User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
-  coordinator        Coordinator?           @relation("AssignedCoordinator", fields: [coordinatorId], references: [id], onDelete: Restrict)
-  coordinatorProfile Coordinator?           @relation("CoordinatorProfile")
-  memberships        Membership[]
-  plans              CommunitySupportPlan[]
-  nominees           Nominee[]
-  dues               Due[]
-  payments           Payment[]
-  wallet             Wallet?
-  contributions      Contribution[]
-  cashCollections    CashCollection[]
-  transfers          CoordinatorTransfer[]
-  deathCases         DeathCase[]            @relation("SubjectMember")
-  referral           Referral?
+  id                      String                 @id @default(uuid()) @db.Uuid
+  externalId              String                 @unique @default(uuid()) @db.Uuid
+  userId                  String                 @unique @db.Uuid
+  coordinatorId           String?                @db.Uuid
+  fullName                String
+  address                 String
+  status                  MembershipStatus       @default(ACTIVE)
+  joinedAt                DateTime               @default(now())
+  membershipBillingAnchor DateTime?
+  closedAt                DateTime?
+  deceasedAt              DateTime?
+  user                    User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  coordinator             Coordinator?           @relation("AssignedCoordinator", fields: [coordinatorId], references: [id], onDelete: Restrict)
+  coordinatorProfile      Coordinator?           @relation("CoordinatorProfile")
+  memberships             Membership[]
+  plans                   CommunitySupportPlan[]
+  nominees                Nominee[]
+  dues                    Due[]
+  payments                Payment[]
+  wallet                  Wallet?
+  contributions           Contribution[]
+  cashCollections         CashCollection[]
+  transfers               CoordinatorTransfer[]
+  deathCases              DeathCase[]            @relation("SubjectMember")
+  referral                Referral?
 
   @@index([status])
   @@index([coordinatorId])
@@ -326,6 +330,7 @@ model Member {
 
 model Coordinator {
   id              String                      @id @default(uuid()) @db.Uuid
+  externalId      String                      @unique @default(uuid()) @db.Uuid
   memberId        String                      @unique @db.Uuid
   referralCode    String                      @unique
   isSuspended     Boolean                     @default(false)
@@ -346,7 +351,7 @@ model CoordinatorLifecycleEvent {
   coordinatorId String      @db.Uuid
   action        String
   reason        String?
-  actorId       String      @db.Uuid
+  actorId       String?     @db.Uuid
   createdAt     DateTime    @default(now())
   coordinator   Coordinator @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
 
@@ -372,7 +377,7 @@ model CoordinatorTransfer {
   toCoordinatorId   String?  @db.Uuid
   reason            String
   effectiveAt       DateTime @default(now())
-  actorId           String   @db.Uuid
+  actorId           String?  @db.Uuid
   member            Member   @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
   @@index([memberId, effectiveAt])
@@ -406,8 +411,10 @@ model CommunitySupportPlan {
   externalId    String     @unique @default(uuid()) @db.Uuid
   memberId      String     @db.Uuid
   status        PlanStatus @default(NOT_REGISTERED)
+  isReopening   Boolean    @default(false)
   activatedAt   DateTime?
   waitingEndsAt DateTime?
+  endedAt       DateTime?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   member        Member     @relation(fields: [memberId], references: [id], onDelete: Restrict)
@@ -453,11 +460,16 @@ model NomineeVerification {
 }
 
 model NomineeDocument {
-  id          String  @id @default(uuid()) @db.Uuid
-  nomineeId   String  @db.Uuid
-  storageKey  String  @unique
-  contentType String
-  nominee     Nominee @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+  id               String   @id @default(uuid()) @db.Uuid
+  externalId       String   @unique @default(uuid()) @db.Uuid
+  nomineeId        String   @db.Uuid
+  storageKey       String   @unique
+  contentType      String
+  originalFilename String   @default("nominee-evidence")
+  sizeBytes        Int      @default(0)
+  evidenceBytes    Bytes?
+  uploadedAt       DateTime @default(now())
+  nominee          Nominee  @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
 
   @@map("nominee_documents")
 }
@@ -555,24 +567,43 @@ model Contribution {
 }
 
 model Due {
-  id             String                @id @default(uuid()) @db.Uuid
-  externalId     String                @unique @default(uuid()) @db.Uuid
-  memberId       String                @db.Uuid
-  planId         String?               @db.Uuid
-  purpose        String
-  amountPaise    Int
-  status         DueStatus             @default(PENDING)
-  dueAt          DateTime
-  paidAt         DateTime?
-  lastReminderAt DateTime?
-  createdAt      DateTime              @default(now())
-  member         Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  plan           CommunitySupportPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
-  payments       Payment[]
+  id              String                @id @default(uuid()) @db.Uuid
+  externalId      String                @unique @default(uuid()) @db.Uuid
+  memberId        String                @db.Uuid
+  planId          String?               @db.Uuid
+  purpose         String
+  billingCycleKey String?               @unique
+  amountPaise     Int
+  status          DueStatus             @default(PENDING)
+  dueAt           DateTime
+  paidAt          DateTime?
+  lastReminderAt  DateTime?
+  createdAt       DateTime              @default(now())
+  member          Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  plan            CommunitySupportPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments        Payment[]
+  waiverRequests  DueWaiverRequest[]
 
   @@index([memberId, status, dueAt])
   @@index([planId, status])
   @@map("dues")
+}
+
+model DueWaiverRequest {
+  externalId     String    @id @default(uuid()) @db.Uuid
+  dueId          String    @db.Uuid
+  requestedById  String    @db.Uuid
+  reason         String
+  idempotencyKey String    @unique
+  status         String    @default("PENDING")
+  decidedById    String?   @db.Uuid
+  decisionReason String?
+  decidedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  due            Due       @relation(fields: [dueId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@map("due_waiver_requests")
 }
 
 model Payment {
@@ -680,6 +711,20 @@ model WalletTransaction {
   @@map("wallet_transactions")
 }
 
+model WalletCreditCommand {
+  externalId          String   @id @default(uuid()) @db.Uuid
+  idempotencyKey      String   @unique
+  memberId            String   @db.Uuid
+  actorId             String   @db.Uuid
+  amountPaise         Int
+  purpose             String
+  reason              String
+  walletTransactionId String   @unique @db.Uuid
+  createdAt           DateTime @default(now())
+
+  @@map("wallet_credit_commands")
+}
+
 model SupportCase {
   id                     String                        @id @default(uuid()) @db.Uuid
   externalId             String                        @unique @default(uuid()) @db.Uuid
@@ -777,79 +822,199 @@ model SupportDocumentVerification {
 }
 
 model FoundationLedger {
-  id                String          @id @default(uuid()) @db.Uuid
-  direction         LedgerDirection
-  amountPaise       Int
-  purpose           String
-  relatedExternalId String?
-  authorizedActorId String?         @db.Uuid
-  reference         String?
-  status            PaymentStatus   @default(PENDING)
-  createdAt         DateTime        @default(now())
+  id                  String          @id @default(uuid()) @db.Uuid
+  externalId          String          @unique @default(uuid()) @db.Uuid
+  supportingDepositId String?         @db.Uuid
+  supportingDeposit   CashDeposit?    @relation(fields: [supportingDepositId], references: [id], onDelete: Restrict)
+  direction           LedgerDirection
+  amountPaise         Int
+  purpose             String
+  relatedExternalId   String?
+  authorizedActorId   String?         @db.Uuid
+  reference           String?
+  status              PaymentStatus   @default(PENDING)
+  createdAt           DateTime        @default(now())
 
   @@index([createdAt, direction])
   @@map("foundation_ledger")
 }
 
 model CashCollection {
-  id            String        @id @default(uuid()) @db.Uuid
-  externalId    String        @unique @default(uuid()) @db.Uuid
-  coordinatorId String        @db.Uuid
-  memberId      String        @db.Uuid
-  dueId         String        @db.Uuid
-  paymentId     String        @unique @db.Uuid
+  id            String                  @id @default(uuid()) @db.Uuid
+  externalId    String                  @unique @default(uuid()) @db.Uuid
+  coordinatorId String                  @db.Uuid
+  memberId      String                  @db.Uuid
+  dueId         String                  @db.Uuid
+  paymentId     String                  @unique @db.Uuid
   amountPaise   Int
-  method        PaymentMethod @default(CASH)
-  receiptNumber String        @unique
-  status        CashStatus    @default(RECEIVED_BY_COORDINATOR)
-  coordinator   Coordinator   @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
-  member        Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  method        PaymentMethod           @default(CASH)
+  receiptNumber String                  @unique
+  status        CashStatus              @default(RECEIVED_BY_COORDINATOR)
+  createdAt     DateTime                @default(now())
+  allocations   CashDepositAllocation[]
+  discrepancy   CashDiscrepancy?
+  coordinator   Coordinator             @relation(fields: [coordinatorId], references: [id], onDelete: Restrict)
+  member        Member                  @relation(fields: [memberId], references: [id], onDelete: Restrict)
 
   @@index([dueId, status])
   @@map("cash_collections")
 }
 
 model CashDeposit {
-  id            String @id @default(uuid()) @db.Uuid
-  coordinatorId String @db.Uuid
-  evidenceKey   String
-  amountPaise   Int
+  id             String                  @id @default(uuid()) @db.Uuid
+  externalId     String                  @unique @default(uuid()) @db.Uuid
+  coordinatorId  String                  @db.Uuid
+  evidenceKey    String
+  amountPaise    Int
+  bankReference  String?                 @unique
+  idempotencyKey String?                 @unique
+  commandHash    String?
+  evidenceBytes  Bytes?
+  contentType    String?
+  status         String                  @default("PENDING")
+  createdAt      DateTime                @default(now())
+  verifiedAt     DateTime?
+  verifiedBy     String?                 @db.Uuid
+  decisionHash   String?
+  reason         String?
+  allocations    CashDepositAllocation[]
+  ledgerEntries  FoundationLedger[]
 
   @@map("cash_deposits")
 }
 
-model CashDiscrepancy {
-  id               String     @id @default(uuid()) @db.Uuid
-  cashCollectionId String     @unique @db.Uuid
-  status           CashStatus @default(UNRESOLVED)
-  reason           String
+model CashDepositAllocation {
+  id                  String         @id @default(uuid()) @db.Uuid
+  depositId           String         @db.Uuid
+  cashCollectionId    String         @db.Uuid
+  expectedAmountPaise Int
+  receivedAmountPaise Int?
+  deposit             CashDeposit    @relation(fields: [depositId], references: [id], onDelete: Restrict)
+  collection          CashCollection @relation(fields: [cashCollectionId], references: [id], onDelete: Restrict)
 
+  @@unique([depositId, cashCollectionId])
+  @@index([cashCollectionId])
+  @@map("cash_deposit_allocations")
+}
+
+model CashReceiptCounter {
+  year  Int @id
+  value Int
+
+  @@map("cash_receipt_counters")
+}
+
+model LedgerAdjustment {
+  id             String    @id @default(uuid()) @db.Uuid
+  externalId     String    @unique @default(uuid()) @db.Uuid
+  amountPaise    Int
+  purpose        String
+  reference      String    @unique
+  reason         String
+  status         String    @default("PENDING")
+  evidenceBytes  Bytes
+  contentType    String
+  idempotencyKey String    @unique
+  commandHash    String
+  requestedBy    String    @db.Uuid
+  approvedBy     String?   @db.Uuid
+  decisionReason String?
+  decidedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@map("ledger_adjustments")
+}
+
+model CashDiscrepancy {
+  id               String         @id @default(uuid()) @db.Uuid
+  externalId       String         @unique @default(uuid()) @db.Uuid
+  cashCollectionId String         @unique @db.Uuid
+  status           CashStatus     @default(UNRESOLVED)
+  reason           String
+  amountPaise      Int            @default(0)
+  createdAt        DateTime       @default(now())
+  deadlineAt       DateTime       @default(dbgenerated("(CURRENT_TIMESTAMP + interval '30 days')"))
+  resolvedAt       DateTime?
+  escalatedAt      DateTime?
+  collection       CashCollection @relation(fields: [cashCollectionId], references: [id], onDelete: Restrict)
+
+  @@index([status, deadlineAt])
   @@map("cash_discrepancies")
 }
 
 model Notification {
-  id       String    @id @default(uuid()) @db.Uuid
-  userId   String    @db.Uuid
-  channel  String
-  template String
-  payload  Json
-  sentAt   DateTime?
+  id                String    @id @default(uuid()) @db.Uuid
+  externalId        String    @unique @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  channel           String    @default("IN_APP")
+  type              String    @default("SYSTEM")
+  title             String    @default("Community Support Foundation")
+  body              String    @default("")
+  template          String
+  // Payload is server-only metadata. Safe notification DTOs never serialize it.
+  payload           Json
+  relatedExternalId String?
+  idempotencyKey    String?   @unique
+  sentAt            DateTime?
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([userId, sentAt])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, type, createdAt])
   @@map("notifications")
 }
 
 model CommunityNews {
-  id              String     @id @default(uuid()) @db.Uuid
+  id              String        @id @default(uuid()) @db.Uuid
+  externalId      String        @unique @default(uuid()) @db.Uuid
   title           String
   body            String
+  // COORDINATOR_MEMBERS is visible only to members currently assigned to the
+  // owning Coordinator. FOUNDATION_WIDE must be approved by an Admin.
+  audience        String        @default("COORDINATOR_MEMBERS")
+  coordinatorId   String?       @db.Uuid
   publishedAt     DateTime?
-  status          NewsStatus @default(DRAFT)
-  authorId        String?    @db.Uuid
-  approvedById    String?    @db.Uuid
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  archivedAt      DateTime?
+  archiveReason   String?
+  status          NewsStatus    @default(DRAFT)
+  authorId        String?       @db.Uuid
+  approvedById    String?       @db.Uuid
   rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  comments        NewsComment[]
 
+  @@index([status, audience, publishedAt])
+  @@index([coordinatorId, status, publishedAt])
   @@map("community_news")
+}
+
+/**
+ * News comments intentionally use a separate table from death-event condolences.
+ * That keeps Phase 7's public moderation boundary intact while allowing
+ * Coordinator/Admin moderation of community-news discussion.
+ */
+model NewsComment {
+  id               String        @id @default(uuid()) @db.Uuid
+  externalId       String        @unique @default(uuid()) @db.Uuid
+  newsId           String        @db.Uuid
+  userId           String        @db.Uuid
+  body             String
+  status           CommentStatus @default(PUBLISHED)
+  moderatedAt      DateTime?
+  moderatedById    String?       @db.Uuid
+  moderationReason String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  news             CommunityNews @relation(fields: [newsId], references: [id], onDelete: Restrict)
+  author           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([newsId, status, createdAt])
+  @@index([userId, createdAt])
+  @@map("news_comments")
 }
 
 model Comment {
@@ -912,6 +1077,7 @@ model ContributionEventReversal {
 
 model AuditLog {
   id          String   @id @default(uuid()) @db.Uuid
+  externalId  String   @unique @default(uuid()) @db.Uuid
   actorId     String?  @db.Uuid
   actorRole   String?
   action      String
@@ -926,6 +1092,7 @@ model AuditLog {
   actor       User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
   @@map("audit_logs")
 }
 

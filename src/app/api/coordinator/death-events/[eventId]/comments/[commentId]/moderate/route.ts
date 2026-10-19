@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { moderateDeathEventComment } from "../../../../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../../../../server/http/authorize";
@@ -21,7 +22,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Comment moderation denied" },
+      { error: publicErrorMessage(error, "Comment moderation denied") },
       { status: 400 },
     );
   }

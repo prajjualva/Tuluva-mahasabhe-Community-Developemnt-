@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiPermission } from "../../../../server/http/authorize";
 import { collectCashForDue } from "../../../../server/coordinators/cash-payment-service";
+import { cashRouteError } from "../../cash-route-response";
 
 const bodySchema = z.object({
   memberExternalId: z.string().uuid(),
@@ -20,9 +21,6 @@ export async function POST(request: NextRequest) {
       method: payment.method,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Request denied" },
-      { status: 400 },
-    );
+    return cashRouteError(error);
   }
 }

@@ -1,31 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function AdminWalletCredit() {
   const [memberExternalId, setMemberExternalId] = useState("");
   const [amountRupees, setAmountRupees] = useState("");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setIdempotencyKey(crypto.randomUUID());
+  }, []);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const response = await fetch(
-      `/api/admin/wallets/${encodeURIComponent(memberExternalId)}/credit`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountRupees, reason }),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok) {
-      setMessage(data.error ?? "Wallet credit was denied.");
-      return;
+    if (busy || !idempotencyKey) return;
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `/api/admin/wallets/${encodeURIComponent(memberExternalId)}/credit`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ amountRupees, reason, idempotencyKey }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        setMessage(data.error ?? "Wallet credit was denied.");
+        return;
+      }
+      setMessage(`Wallet credited. New balance: ₹${(data.balanceAfterPaise / 100).toFixed(2)}.`);
+      setAmountRupees("");
+      setReason("");
+      setIdempotencyKey(crypto.randomUUID());
+    } catch {
+      setMessage("Could not reach the server. Retry with the same details.");
+    } finally {
+      setBusy(false);
     }
-    setMessage(`Wallet credited. New balance: ₹${(data.balanceAfterPaise / 100).toFixed(2)}.`);
-    setAmountRupees("");
-    setReason("");
   };
 
   return (
@@ -57,7 +71,9 @@ export function AdminWalletCredit() {
           Reason
           <input required value={reason} onChange={(event) => setReason(event.target.value)} />
         </label>
-        <button type="submit">Record wallet credit</button>
+        <button disabled={busy || !idempotencyKey} type="submit">
+          Record wallet credit
+        </button>
       </form>
     </article>
   );

@@ -29,7 +29,26 @@ databaseDescribe("payment refund persistence", () => {
       },
     });
     created.dueIds.push(due.id);
-    await applyFoundationWalletCredit(member.id, 36_900, "TEST_REFUND_CREDIT", user.id);
+    const walletCredit = await applyFoundationWalletCredit(
+      member.id,
+      36_900,
+      "TEST_REFUND_CREDIT",
+      user.id,
+      "Synthetic refund credit",
+      `refund-credit-${marker}`,
+    );
+    const replayCredit = await applyFoundationWalletCredit(
+      member.id,
+      36_900,
+      "TEST_REFUND_CREDIT",
+      user.id,
+      "Synthetic refund credit",
+      `refund-credit-${marker}`,
+    );
+    expect(replayCredit.id).toBe(walletCredit.id);
+    expect(
+      (await prisma.wallet.findUniqueOrThrow({ where: { memberId: member.id } })).balancePaise,
+    ).toBe(36_900);
     const settled = await payDueFromWallet(member.id, due.id, user.id, `refund-pay-${marker}`);
     created.paymentIds.push(settled.payment.id);
 
@@ -95,6 +114,8 @@ databaseDescribe("payment refund persistence", () => {
 
 afterAll(async () => {
   if (!runDatabaseTests || !created.userId) return;
+  await prisma.notification.deleteMany({ where: { userId: created.userId } });
+  await prisma.walletCreditCommand.deleteMany({ where: { memberId: created.memberId } });
   const wallet = created.memberId
     ? await prisma.wallet.findUnique({ where: { memberId: created.memberId } })
     : null;
@@ -113,4 +134,4 @@ afterAll(async () => {
   if (created.dueIds.length) await prisma.due.deleteMany({ where: { id: { in: created.dueIds } } });
   if (created.memberId) await prisma.member.deleteMany({ where: { id: created.memberId } });
   await prisma.user.deleteMany({ where: { id: created.userId } });
-});
+}, 90_000);

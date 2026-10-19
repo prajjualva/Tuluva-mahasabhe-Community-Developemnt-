@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const payments = await prisma.payment.findMany({
       where: { status: "SUCCEEDED" },
       select: {
+        id: true,
         externalId: true,
         amountPaise: true,
         method: true,
@@ -29,6 +30,14 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+    const attention = await prisma.auditLog.findMany({
+      where: {
+        action: "UNAPPLIED_PAYMENT_REQUIRES_REFUND_REVIEW",
+        entityId: { in: payments.map((payment) => payment.id) },
+      },
+      select: { entityId: true },
+    });
+    const attentionIds = new Set(attention.map((item) => item.entityId));
     return NextResponse.json(
       payments.map((payment) => ({
         externalId: payment.externalId,
@@ -39,6 +48,8 @@ export async function GET(request: NextRequest) {
         purpose: payment.due?.purpose ?? "PAYMENT",
         status: payment.refund?.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED",
         refund: payment.refund,
+        requiresRefundReview:
+          attentionIds.has(payment.id) && payment.refund?.status !== "SUCCEEDED",
       })),
     );
   } catch {

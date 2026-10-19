@@ -11,6 +11,7 @@ type Refund = {
   completedAt: string | null;
 };
 type Payment = {
+  requiresRefundReview?: boolean;
   externalId: string;
   amountPaise: number;
   method: "ONLINE" | "WALLET" | "CASH" | "MANUAL";
@@ -85,6 +86,12 @@ export function AdminPaymentRefunds() {
         payments.map((payment) => (
           <section key={payment.externalId}>
             <strong>{payment.member?.fullName ?? "Member"}</strong>
+            {payment.requiresRefundReview && (
+              <p role="alert">
+                Captured funds were not applied to the due. Review and arrange a refund; no
+                membership or plan was activated.
+              </p>
+            )}
             <p>
               {payment.purpose} · {payment.method} · ₹{(payment.amountPaise / 100).toFixed(2)} ·{" "}
               {payment.status}

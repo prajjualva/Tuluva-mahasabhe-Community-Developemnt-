@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { searchReportableMembers } from "../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../server/http/authorize";
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Member search denied" },
+      { error: publicErrorMessage(error, "Member search denied") },
       { status: 400 },
     );
   }

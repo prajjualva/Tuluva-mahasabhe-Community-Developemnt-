@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 type Plan = {
   externalId: string;
+  status: string;
   createdAt: string;
   member: { externalId: string; fullName: string };
 };
@@ -29,8 +30,20 @@ export function AdminPlanQueue() {
   useEffect(() => {
     void load();
   }, []);
-  const approve = async (externalId: string) => {
-    const response = await fetch(`/api/admin/plans/${externalId}/approve`, { method: "POST" });
+  const approve = async (plan: Plan) => {
+    const coverage = plan.status === "PENDING_COORDINATOR_APPROVAL";
+    const reason = coverage
+      ? window.prompt("Reason for Admin acting as temporary Coordinator")
+      : undefined;
+    if (coverage && !reason) return;
+    const response = await fetch(`/api/admin/plans/${plan.externalId}/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        stage: coverage ? "COORDINATOR" : "ADMIN",
+        ...(reason ? { reason } : {}),
+      }),
+    });
     setMessage(
       response.ok
         ? "Plan approved. The six-month waiting period has been recorded."
@@ -54,6 +67,26 @@ export function AdminPlanQueue() {
     );
     await load();
   };
+  const approveCash = async (externalId: string) => {
+    const reason = window.prompt(
+      "Reason for allowing this ₹1,000 Coordinator cash/manual collection",
+    );
+    if (!reason?.trim()) return;
+    try {
+      const response = await fetch(`/api/admin/plan-dues/${externalId}/approve-cash`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      setMessage(
+        response.ok
+          ? "Special cash collection approval recorded."
+          : "Cash collection approval was denied.",
+      );
+    } catch {
+      setMessage("Could not connect. Please try again.");
+    }
+  };
   return (
     <>
       <article>
@@ -67,7 +100,11 @@ export function AdminPlanQueue() {
               <p>
                 Member ID: <code>{plan.member.externalId}</code>
               </p>
-              <button onClick={() => approve(plan.externalId)}>Approve plan</button>
+              <button onClick={() => approve(plan)}>
+                {plan.status === "PENDING_COORDINATOR_APPROVAL"
+                  ? "Approve under temporary Admin coverage"
+                  : "Approve plan"}
+              </button>
             </div>
           ))
         ) : (
@@ -85,6 +122,11 @@ export function AdminPlanQueue() {
                 Member ID: <code>{due.member.externalId}</code>
               </p>
               <button onClick={() => extend(due.externalId)}>Extend with reason</button>
+              {(due.status === "PENDING" || due.status === "OVERDUE") && (
+                <button onClick={() => approveCash(due.externalId)}>
+                  Allow Coordinator cash collection
+                </button>
+              )}
             </div>
           ))
         ) : (

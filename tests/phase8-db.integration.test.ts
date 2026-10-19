@@ -1,4 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { randomBytes } from "node:crypto";
+import { encryptSensitiveRecord } from "../src/server/security/bank-encryption";
 import { prisma } from "../src/server/database/prisma";
 import {
   approveSupportCase,
@@ -24,6 +26,7 @@ const paymentExternalIds: string[] = [];
 databaseDescribe("Phase 8 Neon Community Support payout workflow", () => {
   it("settles one independently eligible ₹1,00,000 payout with audit, dispute, retry, and ledger safety", async () => {
     marker = crypto.randomUUID();
+    vi.stubEnv("BANK_ENCRYPTION_KEY", randomBytes(32).toString("base64"));
     const now = new Date();
     const [admin, memberUser] = await Promise.all([
       prisma.user.create({ data: { email: `phase8-admin-${marker}@example.invalid` } }),
@@ -47,10 +50,23 @@ databaseDescribe("Phase 8 Neon Community Support payout workflow", () => {
         status: "VERIFIED",
         // The service may observe only that this opaque record exists. It is
         // intentionally never returned in the Admin queue DTO.
-        bankEncrypted: { ciphertext: `test-bank-${marker}` },
+        bankEncrypted: encryptSensitiveRecord({
+          accountHolderName: "Synthetic Primary",
+          accountNumber: "123456789012",
+          ifsc: "ABCD0123456",
+        }),
       },
     });
     nomineeId = nominee.id;
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: "NOMINEE_BANK_DETAILS_REVIEWED",
+        entityType: "Nominee",
+        entityId: nominee.id,
+        reason: "Synthetic bank review",
+      },
+    });
     const deathCase = await prisma.deathCase.create({
       data: {
         memberId: member.id,
@@ -112,6 +128,22 @@ databaseDescribe("Phase 8 Neon Community Support payout workflow", () => {
       reason: "Verified restricted evidence for support payment",
     });
     expect(documentsVerified.readiness.requiredDocumentsComplete).toBe(true);
+    await expect(
+      selectSupportNominee({
+        supportCaseExternalId: supportCase.externalId,
+        actorId: admin.id,
+        nomineeExternalId: nominee.externalId,
+      }),
+    ).rejects.toThrow("recheck");
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: "NOMINEE_BANK_DETAILS_REVIEWED",
+        entityType: "Nominee",
+        entityId: nominee.id,
+        reason: "Synthetic fresh bank review for this support case",
+      },
+    });
     const nomineeSelected = await selectSupportNominee({
       supportCaseExternalId: supportCase.externalId,
       actorId: admin.id,
@@ -259,6 +291,7 @@ afterAll(async () => {
 
   await prisma.$transaction(
     async (tx) => {
+      await tx.notification.deleteMany({ where: { userId: { in: userIds } } });
       await tx.auditLog.deleteMany({
         where: {
           OR: [
@@ -295,4 +328,5 @@ afterAll(async () => {
     { maxWait: 10_000, timeout: 30_000 },
   );
   await prisma.$disconnect();
-});
+  vi.unstubAllEnvs();
+}, 90_000);

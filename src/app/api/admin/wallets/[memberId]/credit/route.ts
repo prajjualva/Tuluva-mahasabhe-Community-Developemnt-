@@ -31,6 +31,7 @@ export async function POST(
       "ADMIN_APPROVED_CREDIT",
       principal.userId,
       input.reason,
+      input.idempotencyKey,
     );
     return NextResponse.json({
       memberExternalId,
@@ -40,7 +41,12 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Wallet credit was denied" },
+      {
+        error:
+          error instanceof Error && error.message === "Idempotency key is already in use"
+            ? error.message
+            : "Wallet credit was denied. Check the member, amount and reason.",
+      },
       { status: 400 },
     );
   }

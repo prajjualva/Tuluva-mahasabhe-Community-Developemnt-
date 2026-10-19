@@ -1,0 +1,36 @@
+const publicMessages = new Set([
+  "All outstanding dues and the current membership payment must be settled first",
+  "Current membership payment is required",
+  "Only an inactive membership can be reactivated",
+  "A Community Support Plan already exists",
+  "Only Foundation Admin can reopen a closed membership",
+  "Coordinators are exempt from the ₹1,000 registration fee",
+  "Due is not payable",
+  "A payment for this due is already pending",
+  "Payment not found",
+  "Payment cannot be cancelled",
+  "Checkout is already active; use the payment provider or Foundation support",
+  "A reason and future expiry are required",
+  "Plan registration due not found or already settled",
+  "Only a successful payment can be refunded",
+  "A refund reason is required",
+  "Only PDF, JPEG, PNG, or WebP evidence files are allowed",
+  "Evidence file must be between 1 byte and 10 MB",
+  "Evidence upload was truncated",
+  "Document contents do not match the declared file type",
+  "Death evidence document not found",
+  "Date of death cannot be in the future",
+  "The nominee must be current and verified",
+  "Verified nominee bank details are required",
+  "A reason is required when selecting a secondary or backup nominee",
+  "The approving Admin must recheck nominee bank details for this support case",
+  "This support case can no longer be changed",
+  "Support case not found",
+  "A moderation reason is required",
+  "Comment not found",
+  "Death Support Event not found",
+]);
+/** Never serialize ORM, storage, provider or cryptographic exceptions. */
+export function publicErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && publicMessages.has(error.message) ? error.message : fallback;
+}

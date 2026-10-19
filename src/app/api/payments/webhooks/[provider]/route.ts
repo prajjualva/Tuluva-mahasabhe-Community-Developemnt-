@@ -29,6 +29,8 @@ export async function POST(
 
   try {
     const rawBody = await request.text();
+    if (Buffer.byteLength(rawBody, "utf8") > 1024 * 1024)
+      return NextResponse.json({ error: "Webhook too large" }, { status: 413 });
     const webhook = configured.provider.verifyWebhook(
       rawBody,
       request.headers.get("x-razorpay-signature"),
@@ -43,14 +45,16 @@ export async function POST(
     if (webhook.kind === "PAYMENT") {
       const payment = await prisma.payment.findUnique({
         where: { externalId: webhook.paymentExternalId },
-        select: { id: true, method: true, providerOrderId: true },
+        select: { id: true, method: true, providerOrderId: true, amountPaise: true },
       });
       // The verified provider order must belong to the exact Foundation payment;
       // provider-supplied notes alone are not enough to authorize settlement.
       if (
         !payment ||
         payment.method !== "ONLINE" ||
-        payment.providerOrderId !== webhook.providerOrderId
+        payment.providerOrderId !== webhook.providerOrderId ||
+        payment.amountPaise !== webhook.amountPaise ||
+        webhook.currency !== "INR"
       )
         return NextResponse.json({ error: "Unknown online payment order" }, { status: 400 });
 

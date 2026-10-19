@@ -12,6 +12,7 @@ export function requirePermission(principal: Principal, permission: string): voi
 export const PERMISSIONS = [
   "member:profile:read",
   "member:profile:write",
+  "member:cash:remit",
   "coordinator:members:manage",
   "coordinator:cash:collect",
   "coordinator:death:confirm",

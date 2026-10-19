@@ -1,8 +1,10 @@
 import { Prisma, type SupportCaseStatus } from "@prisma/client";
 import { z } from "zod";
+import { bankDetailsSchema, decryptSensitiveRecord } from "../security/bank-encryption";
 import { SCHEME_DEFAULTS } from "../../domain/scheme-settings";
 import { prisma } from "../database/prisma";
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
+import { createInAppNotificationInTransaction } from "../notifications/notification-service";
 import {
   assertNomineeSelectionAllowed,
   assertSupportAmount,
@@ -450,6 +452,20 @@ export async function selectSupportNominee(raw: z.input<typeof nomineeSelectionI
       (candidate) => candidate.externalId === input.nomineeExternalId,
     );
     if (!nominee) throw new Error("Nominee does not belong to the deceased member");
+    bankDetailsSchema.parse(decryptSensitiveRecord(nominee.bankEncrypted));
+    if (
+      !(await tx.auditLog.findFirst({
+        where: {
+          action: "NOMINEE_BANK_DETAILS_REVIEWED",
+          entityId: nominee.id,
+          actorId: input.actorId,
+          createdAt: { gte: supportCase.createdAt },
+        },
+      }))
+    )
+      throw new Error(
+        "The approving Admin must recheck nominee bank details for this support case",
+      );
     assertNomineeSelectionAllowed(
       {
         kind: nominee.kind,
@@ -491,6 +507,18 @@ export async function selectSupportNominee(raw: z.input<typeof nomineeSelectionI
         },
       },
     });
+    const beneficiaryUserId = updated.deathCase.member?.userId;
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "NOMINEE_VERIFICATION",
+        title: "Support nominee details verified",
+        body: "The nominee and bank details for this Community Support case were verified by the Foundation.",
+        template: "SUPPORT_NOMINEE_VERIFIED",
+        relatedExternalId: updated.externalId,
+        idempotencyKey: `support-case:${updated.id}:nominee-verified`,
+      });
+    }
     return toAdminSupportCaseDto(updated);
   });
 }
@@ -575,6 +603,18 @@ export async function approveSupportCase(raw: z.input<typeof approvalInput>) {
         afterState: { status: updated.status, amountPaise: updated.amountPaise },
       },
     });
+    const beneficiaryUserId = updated.deathCase.member?.userId;
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "SUPPORT_PAYMENT",
+        title: "Community Support payment approved",
+        body: "The Community Support case has been approved. The Foundation will now arrange the verified transfer.",
+        template: "SUPPORT_CASE_APPROVED",
+        relatedExternalId: updated.externalId,
+        idempotencyKey: `support-case:${updated.id}:approved`,
+      });
+    }
     return toAdminSupportCaseDto(updated);
   });
 }
@@ -615,6 +655,18 @@ async function rejectSupportCaseInTransaction(
       afterState: { status: updated.status },
     },
   });
+  const beneficiaryUserId = updated.deathCase.member?.userId;
+  if (beneficiaryUserId) {
+    await createInAppNotificationInTransaction(tx, {
+      userId: beneficiaryUserId,
+      type: "SUPPORT_PAYMENT",
+      title: "Community Support case update",
+      body: "The Community Support case was not approved. Contact the Foundation for the recorded decision details.",
+      template: "SUPPORT_CASE_REJECTED",
+      relatedExternalId: updated.externalId,
+      idempotencyKey: `support-case:${updated.id}:rejected`,
+    });
+  }
   return updated;
 }
 
@@ -679,6 +731,18 @@ export async function openSupportDispute(raw: z.input<typeof disputeInput>) {
         afterState: { status: updated.status },
       },
     });
+    const beneficiaryUserId = updated.deathCase.member?.userId;
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "SUPPORT_PAYMENT",
+        title: "Community Support case temporarily paused",
+        body: "A nominee dispute is being reviewed. No Community Support transfer can be made until the dispute is resolved.",
+        template: "SUPPORT_NOMINEE_DISPUTE_OPENED",
+        relatedExternalId: updated.externalId,
+        idempotencyKey: `support-case:${updated.id}:dispute-opened`,
+      });
+    }
     return toAdminSupportCaseDto(updated);
   });
 }
@@ -760,6 +824,18 @@ export async function resolveSupportDispute(raw: z.input<typeof resolutionInput>
         },
       },
     });
+    const beneficiaryUserId = updated.deathCase.member?.userId;
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "SUPPORT_PAYMENT",
+        title: "Community Support case resumed",
+        body: "The nominee dispute has been resolved. The Foundation may continue the support-payment review.",
+        template: "SUPPORT_NOMINEE_DISPUTE_RESOLVED",
+        relatedExternalId: updated.externalId,
+        idempotencyKey: `support-case:${updated.id}:dispute-resolved`,
+      });
+    }
     return toAdminSupportCaseDto(updated);
   });
 }
@@ -822,6 +898,19 @@ async function createSupportPaymentCommand(
         },
       },
     });
+    const beneficiaryUserId = supportCase.deathCase.member?.userId;
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "SUPPORT_PAYMENT",
+        title:
+          kind === "INITIATED" ? "Support transfer initiated" : "Support transfer retry initiated",
+        body: "The Foundation has recorded a Community Support transfer command. Its status remains pending until a verified bank-transfer outcome is recorded.",
+        template: kind === "INITIATED" ? "SUPPORT_PAYMENT_INITIATED" : "SUPPORT_PAYMENT_RETRIED",
+        relatedExternalId: supportCase.externalId,
+        idempotencyKey: `support-payment:${payment.id}:initiated`,
+      });
+    }
     return { payment, replayed: false };
   });
   return result;
@@ -870,6 +959,11 @@ export async function recordSupportPaymentProviderOutcome(
       include: { supportCase: true },
     });
     if (!payment) throw new Error("Support payment not found");
+    const beneficiary = await tx.supportCase.findUnique({
+      where: { id: payment.supportCaseId },
+      select: { deathCase: { select: { member: { select: { userId: true } } } } },
+    });
+    const beneficiaryUserId = beneficiary?.deathCase.member?.userId;
     assertSupportAmount(payment.amountPaise);
     if (payment.status === "SUCCEEDED" || payment.status === "FAILED") {
       if (payment.providerReference !== input.providerReference)
@@ -916,6 +1010,17 @@ export async function recordSupportPaymentProviderOutcome(
           afterState: { providerReference: input.providerReference },
         },
       });
+      if (beneficiaryUserId) {
+        await createInAppNotificationInTransaction(tx, {
+          userId: beneficiaryUserId,
+          type: "SUPPORT_PAYMENT",
+          title: "Community Support transfer was not completed",
+          body: "The Foundation recorded that the Community Support transfer was not completed. A new transfer can be initiated only after an authorized review.",
+          template: "SUPPORT_PAYMENT_FAILED",
+          relatedExternalId: payment.supportCase.externalId,
+          idempotencyKey: `support-payment:${payment.id}:failed`,
+        });
+      }
       return {
         payment: toSupportPaymentDto(failed),
         supportCase: { externalId: supportCase.externalId, status: supportCase.status },
@@ -960,6 +1065,17 @@ export async function recordSupportPaymentProviderOutcome(
         },
       },
     });
+    if (beneficiaryUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: beneficiaryUserId,
+        type: "SUPPORT_PAYMENT",
+        title: "Community Support transfer completed",
+        body: "The Foundation recorded the verified Community Support transfer as completed.",
+        template: "SUPPORT_PAYMENT_SETTLED",
+        relatedExternalId: paidCase.externalId,
+        idempotencyKey: `support-payment:${settled.id}:succeeded`,
+      });
+    }
     return {
       payment: toSupportPaymentDto(settled),
       supportCase: { externalId: paidCase.externalId, status: paidCase.status },

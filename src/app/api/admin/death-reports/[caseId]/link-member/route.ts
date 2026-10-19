@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { linkUnmatchedDeathReportToMember } from "../../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
@@ -18,7 +19,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Death report member link denied" },
+      { error: publicErrorMessage(error, "Death report member link denied") },
       { status: 400 },
     );
   }

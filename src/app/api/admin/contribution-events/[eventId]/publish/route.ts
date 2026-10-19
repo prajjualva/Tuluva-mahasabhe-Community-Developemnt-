@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { publishDeathSupportEvent } from "../../../../../../server/death/death-workflow-service";
@@ -20,7 +21,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Request denied" },
+      { error: publicErrorMessage(error, "Request denied") },
       { status: 400 },
     );
   }

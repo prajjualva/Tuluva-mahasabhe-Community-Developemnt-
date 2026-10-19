@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { listCoordinatorModerationComments } from "../../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
@@ -15,7 +16,7 @@ export async function GET(
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Comment queue denied" },
+      { error: publicErrorMessage(error, "Comment queue denied") },
       { status: 403 },
     );
   }

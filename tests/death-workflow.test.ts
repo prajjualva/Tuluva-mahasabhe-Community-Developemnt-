@@ -14,6 +14,28 @@ import {
 
 describe("Phase 7 death support rules", () => {
   const dateOfDeath = new Date("2026-05-10T10:00:00.000Z");
+  it("does not let a later plan suspension or reopening erase eligibility at death", () => {
+    const member = {
+      status: "INACTIVE",
+      memberships: [
+        { status: "ACTIVE", startedAt: new Date("2025-01-01"), endedAt: new Date("2026-06-01") },
+      ],
+      nominees: [{ id: "primary", kind: "PRIMARY", status: "VERIFIED", isCurrent: true }],
+      plans: [
+        {
+          status: "SUSPENDED",
+          activatedAt: new Date("2025-01-01"),
+          waitingEndsAt: new Date("2025-07-01"),
+          endedAt: null as Date | null,
+        },
+      ],
+    };
+    expect(evaluateDeathSupportEligibility(member, dateOfDeath).status).toBe("ELIGIBLE");
+    member.plans[0] = { ...member.plans[0], status: "CANCELLED", endedAt: new Date("2026-06-01") };
+    expect(evaluateDeathSupportEligibility(member, dateOfDeath).status).toBe("ELIGIBLE");
+    member.plans[0].endedAt = new Date("2026-05-01");
+    expect(evaluateDeathSupportEligibility(member, dateOfDeath).status).toBe("INELIGIBLE");
+  });
 
   it("uses the membership state at death instead of a later member status", () => {
     const evaluation = evaluateDeathSupportEligibility(

@@ -16,6 +16,7 @@ import {
 import { PaymentProviderRequestError } from "../../../../server/payments/payment-provider";
 import { prisma } from "../../../../server/database/prisma";
 import { memberPaymentRequestSchema } from "../../../../server/payments/member-payment-request";
+import { walletSettlementDto } from "../../../../server/payments/payment-dto";
 export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
@@ -24,7 +25,9 @@ export async function POST(request: NextRequest) {
     const dueId = await dueIdForMemberExternal(memberId, body.dueId);
     if (body.method === "WALLET")
       return NextResponse.json(
-        await payDueFromWallet(memberId, dueId, principal.userId, body.idempotencyKey),
+        walletSettlementDto(
+          await payDueFromWallet(memberId, dueId, principal.userId, body.idempotencyKey),
+        ),
       );
     const due = await prisma.due.findUniqueOrThrow({
       where: { id: dueId },
@@ -38,7 +41,9 @@ export async function POST(request: NextRequest) {
     // Foundation wallet credit. Ordinary dues never use partial wallet credit.
     if (body.method === "ONLINE" && (wallet?.balancePaise ?? 0) >= due.amountPaise)
       return NextResponse.json(
-        await payDueFromWallet(memberId, dueId, principal.userId, body.idempotencyKey),
+        walletSettlementDto(
+          await payDueFromWallet(memberId, dueId, principal.userId, body.idempotencyKey),
+        ),
       );
     if (body.method === "ONLINE" && due.purpose === "PLAN_REGISTRATION") {
       const availability = onlinePaymentAvailability();

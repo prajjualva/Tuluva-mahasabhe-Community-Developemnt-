@@ -13,11 +13,30 @@ describe("Admin wallet credit input", () => {
 
   it("requires a bounded decimal amount and audit reason", () => {
     expect(
-      walletCreditRequestSchema.safeParse({ amountRupees: "0.001", reason: "Adjustment" }).success,
+      walletCreditRequestSchema.safeParse({
+        amountRupees: "0.001",
+        reason: "Adjustment",
+        idempotencyKey: "wallet-command-test-001",
+      }).success,
     ).toBe(false);
-    expect(walletCreditRequestSchema.safeParse({ amountRupees: "100", reason: "  " }).success).toBe(
-      false,
-    );
+    expect(
+      walletCreditRequestSchema.safeParse({
+        amountRupees: "100",
+        reason: "  ",
+        idempotencyKey: "wallet-command-test-001",
+      }).success,
+    ).toBe(false);
     expect(() => rupeeTextToPaise("0")).toThrow("range");
+    expect(
+      walletCreditRequestSchema.safeParse({
+        amountRupees: "100",
+        reason: "Approved adjustment",
+        idempotencyKey: "wallet-command-test-001",
+      }).success,
+    ).toBe(true);
+    expect(
+      walletCreditRequestSchema.safeParse({ amountRupees: "100", reason: "Approved adjustment" })
+        .success,
+    ).toBe(false);
   });
 });

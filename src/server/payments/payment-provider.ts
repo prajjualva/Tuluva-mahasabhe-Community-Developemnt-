@@ -43,6 +43,8 @@ export type VerifiedPaymentWebhook =
       paymentExternalId: string;
       providerOrderId: string;
       providerReference: string;
+      amountPaise: number;
+      currency: "INR";
       occurredAt: Date;
       payload: Record<string, unknown>;
     }
@@ -96,6 +98,8 @@ type RazorpayConfig = {
 const razorpayPaymentEntitySchema = z.object({
   id: z.string().min(1).max(200),
   order_id: z.string().min(1).max(200),
+  amount: z.number().int().positive(),
+  currency: z.literal("INR"),
   created_at: z.number().int().nonnegative().optional(),
   notes: z.record(z.unknown()).default({}),
 });
@@ -110,6 +114,7 @@ const razorpayRefundEntitySchema = z.object({
 
 const razorpayWebhookSchema = z.object({
   event: z.enum(["payment.captured", "payment.failed", "refund.processed", "refund.failed"]),
+  created_at: z.number().int().nonnegative().optional(),
   payload: z.object({
     payment: z.object({ entity: razorpayPaymentEntitySchema }).optional(),
     refund: z.object({ entity: razorpayRefundEntitySchema }).optional(),
@@ -281,8 +286,17 @@ export class RazorpayPaymentProvider implements PaymentProvider {
         paymentExternalId: externalIdFromNotes(entity.notes, "foundation_payment_external_id"),
         providerOrderId: entity.order_id,
         providerReference: entity.id,
-        occurredAt: new Date((entity.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
-        payload: parsed as Record<string, unknown>,
+        amountPaise: entity.amount,
+        currency: entity.currency,
+        // Event time represents capture; entity creation may predate capture.
+        occurredAt: new Date((parsed.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
+        payload: {
+          event: parsed.event,
+          paymentReference: entity.id,
+          providerOrderId: entity.order_id,
+          amountPaise: entity.amount,
+          currency: entity.currency,
+        },
       };
     }
     const entity = parsed.payload.refund?.entity;
@@ -296,8 +310,13 @@ export class RazorpayPaymentProvider implements PaymentProvider {
       refundReference: entity.id,
       providerPaymentReference: entity.payment_id,
       amountPaise: entity.amount,
-      occurredAt: new Date((entity.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
-      payload: parsed as Record<string, unknown>,
+      occurredAt: new Date((parsed.created_at ?? Math.floor(Date.now() / 1000)) * 1000),
+      payload: {
+        event: parsed.event,
+        refundReference: entity.id,
+        providerPaymentReference: entity.payment_id,
+        amountPaise: entity.amount,
+      },
     };
   }
 }

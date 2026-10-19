@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireApiPermission(request, "admin:*");
     const collections = await prisma.cashCollection.findMany({
-      where: { status: "PENDING_ADMIN_VERIFICATION" },
+      where: { status: { in: ["RECEIVED_BY_COORDINATOR", "PENDING_ADMIN_VERIFICATION"] } },
       select: {
         externalId: true,
         amountPaise: true,

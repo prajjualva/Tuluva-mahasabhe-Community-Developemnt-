@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { closeDeathSupportEvent } from "../../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
@@ -15,7 +16,7 @@ export async function POST(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Death Support Event closure denied" },
+      { error: publicErrorMessage(error, "Death Support Event closure denied") },
       { status: 400 },
     );
   }

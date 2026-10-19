@@ -1,4 +1,5 @@
 "use client";
+import { RestrictedBankReview } from "../components/restricted-bank-review";
 
 import { useCallback, useEffect, useState } from "react";
 
@@ -360,9 +361,12 @@ export function AdminSupportPaymentQueue() {
                     >
                       Confirm nominee and verified bank
                     </button>
-                    <p className="muted">
-                      Restricted bank account data is never displayed on this screen.
-                    </p>
+                    {nominees[supportCase.externalId] && (
+                      <RestrictedBankReview
+                        key={nominees[supportCase.externalId]}
+                        nomineeExternalId={nominees[supportCase.externalId]}
+                      />
+                    )}
                   </div>
 
                   <div className="support-action-panel">

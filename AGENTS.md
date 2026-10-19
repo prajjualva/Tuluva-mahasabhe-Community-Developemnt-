@@ -26,3 +26,16 @@
 - Add focused tests for new financial, eligibility, authorization, and status-transition rules before considering them complete.
 - Run `npm run test`, `npm run lint`, and `npm run build` after meaningful changes. Keep migrations and seed data current.
 - Development seed credentials must stay development-only and be documented. Never create seeded production-like financial records.
+
+## Lifecycle and release lessons
+
+- Membership existence at event creation determines contribution obligations; actual-date-of-death membership/plan history determines support eligibility. Never use current ACTIVE status to merge these concepts.
+- Use UTC calendar-month arithmetic for annual billing, grace, closure and six-month waiting periods. Preserve the billing anchor separately from historical joinedAt on Admin reopening.
+- Coordinator ₹369/₹1,000 exemptions do not waive ₹100 contributions. Referral codes are permanent, with suspension enforced by live permissions and profile state.
+- A captured payment for a no-longer-payable due is real money: record it without reviving the due or entitlement, audit it and flag Admin refund review.
+- Reminder claims and notifications must commit atomically. Process bounded batches and short per-record transactions, not unbounded transactions over all members.
+- Never reject a cash collection to erase a discrepancy. Reconcile evidence and actual received funds; keep suspended collectors' own remittance recovery separate from Coordinator permissions.
+- Require fresh, explicitly audited bank review for each support case. Do not treat registration-time bank verification as payout-time verification.
+- Use direct/non-pooled Neon connections for migrations; pooled session advisory locks can survive a migration connection.
+- Integration tests belong on isolated test databases. Windows Prisma generation may require stopping only verified workspace engine-owning processes; never terminate unrelated Node processes.
+- A passing build is not production readiness. Document provider credentials, private persistent storage, job scheduling, key recovery, backups and independent security acceptance separately.

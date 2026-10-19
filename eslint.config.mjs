@@ -7,6 +7,13 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: [".next/**", "next-env.d.ts", "node_modules/**", "coverage/**", "prisma/generated/**"],
+    ignores: [
+      ".next/**",
+      ".next-validation/**",
+      "next-env.d.ts",
+      "node_modules/**",
+      "coverage/**",
+      "prisma/generated/**",
+    ],
   },
 ];

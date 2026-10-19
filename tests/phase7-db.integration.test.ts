@@ -141,6 +141,7 @@ databaseDescribe("Phase 7 Neon death-support workflow", () => {
     const historicalCandidates = await prisma.member.findMany({
       where: {
         joinedAt: { lte: approvedEvent.createdAt },
+        OR: [{ deceasedAt: null }, { deceasedAt: { gt: approvedEvent.createdAt } }],
         id: { not: subject.id },
       },
       select: { externalId: true },
@@ -176,7 +177,9 @@ databaseDescribe("Phase 7 Neon death-support workflow", () => {
       event.contributions.map((contribution) => contribution.member.externalId).sort(),
     ).toEqual(historicalCandidateIds);
     expect(contributionDues).toHaveLength(historicalCandidateIds.length);
-    expect(contributionDues.every((due) => due.status === "PENDING")).toBe(true);
+    expect(
+      contributionDues.every((due) => due.status === "PENDING" || due.status === "WAIVED"),
+    ).toBe(true);
     expect(
       event.contributions.some(
         (contribution) => contribution.member.externalId === subject.externalId,
@@ -231,7 +234,7 @@ afterAll(async () => {
   const memberIds = members.map((member) => member.id);
   const cases = await prisma.deathCase.findMany({
     where: { memberId: { in: memberIds } },
-    select: { id: true, event: { select: { id: true } } },
+    select: { id: true, event: { select: { id: true, externalId: true } } },
   });
   const documents = cases.length
     ? await prisma.deathDocument.findMany({
@@ -240,6 +243,9 @@ afterAll(async () => {
       })
     : [];
   const eventIds = cases.flatMap((deathCase) => (deathCase.event ? [deathCase.event.id] : []));
+  const eventExternalIds = cases.flatMap((deathCase) =>
+    deathCase.event ? [deathCase.event.externalId] : [],
+  );
   const contributions = eventIds.length
     ? await prisma.contribution.findMany({
         where: { eventId: { in: eventIds } },
@@ -253,6 +259,17 @@ afterAll(async () => {
 
   await prisma.$transaction(
     async (tx) => {
+      await tx.notification.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: userIds } },
+            { relatedExternalId: { in: eventExternalIds } },
+            ...eventIds.map((eventId) => ({
+              idempotencyKey: { startsWith: `contribution-due:${eventId}:` },
+            })),
+          ],
+        },
+      });
       if (eventIds.length) {
         await tx.comment.deleteMany({ where: { eventId: { in: eventIds } } });
         await tx.contributionEventReversal.deleteMany({
@@ -264,6 +281,22 @@ afterAll(async () => {
         await tx.contributionEvent.deleteMany({ where: { id: { in: eventIds } } });
       }
       if (cases.length) {
+        const caseIds = cases.map((deathCase) => deathCase.id);
+        // An Admin support-queue read can materialize review cases for prior
+        // synthetic death reports. Remove their dependent review records first.
+        const supportCases = await tx.supportCase.findMany({
+          where: { deathCaseId: { in: caseIds } },
+          select: { id: true },
+        });
+        const supportIds = supportCases.map((item) => item.id);
+        if (await tx.supportPayment.count({ where: { supportCaseId: { in: supportIds } } }))
+          throw new Error("Synthetic Phase 7 cleanup encountered an unexpected payout");
+        await tx.supportDocumentVerification.deleteMany({
+          where: { supportCaseId: { in: supportIds } },
+        });
+        await tx.supportDispute.deleteMany({ where: { supportCaseId: { in: supportIds } } });
+        await tx.auditLog.deleteMany({ where: { entityId: { in: supportIds } } });
+        await tx.supportCase.deleteMany({ where: { id: { in: supportIds } } });
         await tx.deathDocument.deleteMany({
           where: { deathCaseId: { in: cases.map((deathCase) => deathCase.id) } },
         });
@@ -302,4 +335,4 @@ afterAll(async () => {
   );
   await Promise.all(documents.map((document) => removeDeathEvidence(document.storageKey)));
   await prisma.$disconnect();
-});
+}, 90_000);

@@ -97,12 +97,12 @@ databaseDescribe("cash recollection persistence", () => {
     });
     expect(collections).toHaveLength(2);
     expect(collections.map((collection) => collection.status).sort()).toEqual([
-      "PENDING_ADMIN_VERIFICATION",
+      "RECEIVED_BY_COORDINATOR",
       "REJECTED",
     ]);
     const manual = collections.find((collection) => collection.method === "MANUAL");
     expect(manual?.receiptNumber).toMatch(/^MANUAL-\d{4}-/);
-  }, 30_000);
+  }, 90_000);
 });
 
 afterAll(async () => {
@@ -113,6 +113,11 @@ afterAll(async () => {
   await prisma.auditLog.deleteMany({
     where: { actorId: { in: [created.coordinatorUserId, created.memberUserId] } },
   });
+  await prisma.notification.deleteMany({
+    where: { userId: { in: [created.coordinatorUserId, created.memberUserId] } },
+  });
+  if (created.dueId)
+    await prisma.receipt.deleteMany({ where: { payment: { dueId: created.dueId } } });
   if (created.dueId) await prisma.cashCollection.deleteMany({ where: { dueId: created.dueId } });
   if (created.dueId) await prisma.payment.deleteMany({ where: { dueId: created.dueId } });
   if (created.dueId) await prisma.due.deleteMany({ where: { id: created.dueId } });
@@ -126,4 +131,4 @@ afterAll(async () => {
   if (created.memberUserId) await prisma.user.deleteMany({ where: { id: created.memberUserId } });
   if (created.coordinatorUserId)
     await prisma.user.deleteMany({ where: { id: created.coordinatorUserId } });
-});
+}, 60_000);

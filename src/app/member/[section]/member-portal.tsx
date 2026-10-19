@@ -1,5 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { MemberCommunications } from "../member-communications";
+import { MemberProfile } from "../member-profile";
 
 type Due = {
   externalId: string;
@@ -9,7 +12,13 @@ type Due = {
   status: string;
   contributionEventExternalId: string | null;
 };
-type Plan = { externalId?: string; status: string; activatedAt?: string; waitingEndsAt?: string };
+type Plan = {
+  externalId?: string;
+  status: string;
+  activatedAt?: string;
+  waitingEndsAt?: string;
+  feeExempt?: boolean;
+};
 type Membership = { status: string; joinedAt: string };
 type Checkout = {
   provider: "razorpay";
@@ -87,42 +96,81 @@ export function MemberPortal({ section }: { section: string }) {
       status: string;
       method: string;
       canCancel: boolean;
+      canResume: boolean;
     }>
   >([]);
   const [receipts, setReceipts] = useState<Array<{ receiptNumber: string; issuedAt: string }>>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptDetail | null>(null);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [message, setMessage] = useState("");
-  const load = async () => {
-    const [
-      planResult,
-      dueResult,
-      walletResult,
-      walletActivityResult,
-      paymentResult,
-      receiptResult,
-      membershipResult,
-    ] = await Promise.all([
-      fetch("/api/member/plan/status"),
-      fetch("/api/member/dues"),
-      fetch("/api/member/wallet"),
-      fetch("/api/member/wallet/activity?limit=20"),
-      fetch("/api/member/payments/history"),
-      fetch("/api/member/receipts"),
-      fetch("/api/member/membership/status"),
-    ]);
-    if (planResult.ok) setPlan(await planResult.json());
-    if (dueResult.ok) setDues(await dueResult.json());
-    if (walletResult.ok) setWallet((await walletResult.json()).balancePaise);
-    if (walletActivityResult.ok) {
-      const activityResponse = (await walletActivityResult.json()) as {
-        activity: WalletActivity[];
-      };
-      setWalletActivity(activityResponse.activity);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const commandLock = useRef(false);
+  async function runAction(operation: () => Promise<void>) {
+    if (commandLock.current) return;
+    commandLock.current = true;
+    setBusy(true);
+    try {
+      await operation();
+    } catch {
+      setMessage(
+        "Could not complete the request. Check your payment history before retrying a payment.",
+      );
+    } finally {
+      commandLock.current = false;
+      setBusy(false);
     }
-    if (paymentResult.ok) setPayments(await paymentResult.json());
-    if (receiptResult.ok) setReceipts(await receiptResult.json());
-    if (membershipResult.ok) setMembership(await membershipResult.json());
+  }
+  const load = async () => {
+    try {
+      const [
+        planResult,
+        dueResult,
+        walletResult,
+        walletActivityResult,
+        paymentResult,
+        receiptResult,
+        membershipResult,
+      ] = await Promise.all([
+        fetch("/api/member/plan/status"),
+        fetch("/api/member/dues"),
+        fetch("/api/member/wallet"),
+        fetch("/api/member/wallet/activity?limit=20"),
+        fetch("/api/member/payments/history"),
+        fetch("/api/member/receipts"),
+        fetch("/api/member/membership/status"),
+      ]);
+      if (planResult.ok) setPlan(await planResult.json());
+      if (dueResult.ok) setDues(await dueResult.json());
+      if (walletResult.ok) setWallet((await walletResult.json()).balancePaise);
+      if (walletActivityResult.ok) {
+        const activityResponse = (await walletActivityResult.json()) as {
+          activity: WalletActivity[];
+        };
+        setWalletActivity(activityResponse.activity);
+      }
+      if (paymentResult.ok) setPayments(await paymentResult.json());
+      if (receiptResult.ok) setReceipts(await receiptResult.json());
+      if (membershipResult.ok) setMembership(await membershipResult.json());
+      if (
+        [
+          planResult,
+          dueResult,
+          walletResult,
+          walletActivityResult,
+          paymentResult,
+          receiptResult,
+          membershipResult,
+        ].some((result) => !result.ok)
+      )
+        setMessage(
+          "Some records could not be loaded. Your session may have expired; sign in again or refresh to retry.",
+        );
+    } catch {
+      setMessage("Could not load your records. Check your connection and refresh to retry.");
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => {
     void load();
@@ -141,7 +189,12 @@ export function MemberPortal({ section }: { section: string }) {
     method: "ONLINE" | "WALLET",
     walletSuccessMessage: string,
   ) => {
-    const data = (await result.json()) as { checkout?: Checkout; error?: string };
+    const data = (await result.json()) as {
+      checkout?: Checkout;
+      error?: string;
+      method?: string;
+      status?: string;
+    };
     if (result.ok && data.checkout) {
       try {
         await openGatewayCheckout(data.checkout);
@@ -156,7 +209,7 @@ export function MemberPortal({ section }: { section: string }) {
     }
     setMessage(
       result.ok
-        ? method === "WALLET"
+        ? method === "WALLET" || (data.method === "WALLET" && data.status === "SUCCEEDED")
           ? walletSuccessMessage
           : "Online payment is awaiting the configured payment provider."
         : (data.error ?? "Payment could not be started"),
@@ -170,6 +223,13 @@ export function MemberPortal({ section }: { section: string }) {
       body: JSON.stringify({ dueId: due.externalId, method, idempotencyKey: key() }),
     });
     await handlePaymentStart(result, method, "Wallet payment settled and receipt issued.");
+  };
+  const resumePayment = async (paymentExternalId: string) => {
+    const response = await fetch(
+      `/api/member/payments/${encodeURIComponent(paymentExternalId)}/resume`,
+      { method: "POST" },
+    );
+    await handlePaymentStart(response, "ONLINE", "Wallet payment settled.");
   };
   const payContribution = async (method: "ONLINE" | "WALLET", eventExternalId?: string) => {
     const result = await fetch("/api/member/contributions/pay", {
@@ -250,188 +310,277 @@ export function MemberPortal({ section }: { section: string }) {
     }
   };
   return (
-    <main>
-      <p className="eyebrow">MEMBER PORTAL</p>
-      <h1>{section.replaceAll("-", " ")}</h1>
-      <p>{message}</p>
-      {(section === "membership" || section === "dashboard") && (
-        <article>
-          <h2>Membership</h2>
-          <p>
-            Status: <strong>{membership?.status ?? "Loading"}</strong>
+    <main aria-busy={busy}>
+      <fieldset className="portal-content" disabled={busy} aria-label="Member services">
+        <p className="eyebrow">MEMBER PORTAL</p>
+        <h1>
+          {section === "dashboard"
+            ? "My community, my membership"
+            : section
+                .split("-")
+                .map((word) => word[0].toUpperCase() + word.slice(1))
+                .join(" ")}
+        </h1>
+        <p className="page-description">
+          {section === "dashboard"
+            ? "Your membership, community support and important updates—all in one place."
+            : "Manage your Foundation records securely. Financial amounts and eligibility are determined by the Foundation's locked rules."}
+        </p>
+        {loading && <p role="status">Loading your private records…</p>}
+        {message && (
+          <p className="feedback-message" role="status">
+            {message}
           </p>
-          {membership?.status === "INACTIVE" && (
-            <button onClick={reactivate}>Reactivate after settling dues</button>
-          )}
-          {membership?.status === "CLOSED" && (
-            <p>
-              A closed membership requires a new Community Support Plan registration when reopened.
-            </p>
-          )}
-        </article>
-      )}
-      {(section === "community-support-plan" || section === "dashboard") && (
-        <article>
-          <h2>Community Support Plan</h2>
-          <p>
-            Status: <strong>{plan?.status ?? "Loading"}</strong>
-          </p>
-          {plan?.waitingEndsAt && (
-            <p>Initial waiting period ends: {new Date(plan.waitingEndsAt).toLocaleDateString()}</p>
-          )}
-          {plan?.status === "NOT_REGISTERED" && (
-            <button onClick={startPlan}>Start ₹1,000 registration</button>
-          )}
-        </article>
-      )}
-      {(section === "payments-receipts" ||
-        section === "community-support-plan" ||
-        section === "dashboard") && (
-        <>
+        )}
+        {section === "dashboard" && <MemberProfile summary />}
+        {section === "dashboard" && (
+          <div className="grid member-quick-links">
+            <Link href="/member/dues">
+              <span>Outstanding obligations</span>
+              <strong>{loading ? "…" : dues.length}</strong>
+              <small>View dues & payment options →</small>
+            </Link>
+            <Link href="/member/wallet">
+              <span>Foundation Wallet</span>
+              <strong>{loading ? "…" : money(wallet)}</strong>
+              <small>View balance & activity →</small>
+            </Link>
+            <Link href="/member/payments-receipts">
+              <span>Official receipts</span>
+              <strong>{loading ? "…" : receipts.length}</strong>
+              <small>View payments & receipts →</small>
+            </Link>
+          </div>
+        )}
+        {(section === "membership" || section === "dashboard") && (
           <article>
-            <h2>Payable dues</h2>
-            {dues.some((due) => due.purpose === "CONTRIBUTION") && (
-              <section aria-label="Contribution payment options">
-                <h3>₹100 contribution payment</h3>
-                <p>FIFO payment settles your oldest outstanding contribution first.</p>
-                <button onClick={() => payContribution("WALLET")}>Pay oldest from wallet</button>
-                <button onClick={() => payContribution("ONLINE")}>Pay oldest online</button>
-              </section>
+            <h2>Membership</h2>
+            <p>
+              Status: <strong>{membership?.status ?? "Loading"}</strong>
+            </p>
+            <button
+              onClick={async () => {
+                const response = await fetch("/api/member/membership/refresh", { method: "POST" });
+                setMessage(
+                  response.ok
+                    ? "Membership renewal and status checked."
+                    : "Could not refresh membership.",
+                );
+                await load();
+              }}
+            >
+              Check renewal and status
+            </button>
+            {membership?.status === "INACTIVE" && (
+              <button onClick={reactivate}>Reactivate after settling dues</button>
             )}
-            {dues.length ? (
-              dues.map((due) => (
-                <div key={due.externalId}>
-                  <strong>{due.purpose}</strong> — {money(due.amountPaise)} due{" "}
-                  {new Date(due.dueAt).toLocaleDateString()}{" "}
-                  {due.purpose === "CONTRIBUTION" ? (
-                    due.contributionEventExternalId ? (
+            {membership?.status === "CLOSED" && (
+              <p>
+                A closed membership requires a new Community Support Plan registration when
+                reopened.
+              </p>
+            )}
+          </article>
+        )}
+        {(section === "community-support-plan" || section === "dashboard") && (
+          <article>
+            <h2>Community Support Plan</h2>
+            <p>
+              Status: <strong>{plan?.status ?? "Loading"}</strong>
+            </p>
+            {plan?.waitingEndsAt && (
+              <p>
+                Initial waiting period ends: {new Date(plan.waitingEndsAt).toLocaleDateString()}
+              </p>
+            )}
+            {plan?.feeExempt && (
+              <p>
+                Coordinators are exempt from the ₹369 membership and ₹1,000 plan fees. ₹100 event
+                contributions still apply.
+              </p>
+            )}
+            {plan?.status === "NOT_REGISTERED" && !plan.feeExempt && (
+              <button onClick={() => void runAction(startPlan)}>Start ₹1,000 registration</button>
+            )}
+          </article>
+        )}
+        {(section === "notifications" ||
+          section === "community-news" ||
+          section === "dashboard") && <MemberCommunications />}
+        {(section === "payments-receipts" ||
+          section === "dues" ||
+          section === "community-support-plan") && (
+          <>
+            <article>
+              <h2>Payable dues</h2>
+              {dues.some((due) => due.purpose === "CONTRIBUTION") && (
+                <section aria-label="Contribution payment options">
+                  <h3>₹100 contribution payment</h3>
+                  <p>FIFO payment settles your oldest outstanding contribution first.</p>
+                  <button onClick={() => void runAction(() => payContribution("WALLET"))}>
+                    Pay oldest from wallet
+                  </button>
+                  <button onClick={() => void runAction(() => payContribution("ONLINE"))}>
+                    Pay oldest online
+                  </button>
+                </section>
+              )}
+              {dues.length ? (
+                dues.map((due) => (
+                  <div key={due.externalId}>
+                    <strong>{due.purpose}</strong> — {money(due.amountPaise)} due{" "}
+                    {new Date(due.dueAt).toLocaleDateString()}{" "}
+                    {due.purpose === "CONTRIBUTION" ? (
+                      due.contributionEventExternalId ? (
+                        <>
+                          <p>
+                            Death Support Event: <code>{due.contributionEventExternalId}</code>
+                          </p>
+                          <button
+                            onClick={() =>
+                              runAction(() =>
+                                payContribution(
+                                  "WALLET",
+                                  due.contributionEventExternalId ?? undefined,
+                                ),
+                              )
+                            }
+                          >
+                            Pay this event from wallet
+                          </button>
+                          <button
+                            onClick={() =>
+                              runAction(() =>
+                                payContribution(
+                                  "ONLINE",
+                                  due.contributionEventExternalId ?? undefined,
+                                ),
+                              )
+                            }
+                          >
+                            Pay this event online
+                          </button>
+                        </>
+                      ) : (
+                        <p>Event details are unavailable. You can still use FIFO payment above.</p>
+                      )
+                    ) : (
                       <>
-                        <p>
-                          Death Support Event: <code>{due.contributionEventExternalId}</code>
-                        </p>
-                        <button
-                          onClick={() =>
-                            payContribution("WALLET", due.contributionEventExternalId ?? undefined)
-                          }
-                        >
-                          Pay this event from wallet
+                        <button onClick={() => void runAction(() => pay(due, "WALLET"))}>
+                          Pay from wallet
                         </button>
-                        <button
-                          onClick={() =>
-                            payContribution("ONLINE", due.contributionEventExternalId ?? undefined)
-                          }
-                        >
-                          Pay this event online
+                        <button onClick={() => void runAction(() => pay(due, "ONLINE"))}>
+                          Pay online
                         </button>
                       </>
-                    ) : (
-                      <p>Event details are unavailable. You can still use FIFO payment above.</p>
-                    )
-                  ) : (
-                    <>
-                      <button onClick={() => pay(due, "WALLET")}>Pay from wallet</button>
-                      <button onClick={() => pay(due, "ONLINE")}>Pay online</button>
-                    </>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p>No payable dues.</p>
-            )}
-          </article>
-          <article>
-            <h2>Receipts</h2>
-            {receipts.length ? (
-              receipts.map((receipt) => (
-                <p key={receipt.receiptNumber}>
-                  {receipt.receiptNumber} · {new Date(receipt.issuedAt).toLocaleDateString()}
-                  <button onClick={() => viewReceipt(receipt.receiptNumber)}>View receipt</button>
-                </p>
-              ))
-            ) : (
-              <p>No receipts yet.</p>
-            )}
-          </article>
-          {selectedReceipt && (
-            <article aria-label="Official payment receipt">
-              <h2>Official receipt</h2>
-              <p>
-                <strong>{selectedReceipt.receiptNumber}</strong>
-              </p>
-              <p>Issued: {new Date(selectedReceipt.issuedAt).toLocaleString()}</p>
-              <p>Member: {selectedReceipt.payment.member?.fullName ?? "Member"}</p>
-              <p>
-                Member ID: <code>{selectedReceipt.payment.member?.externalId ?? "—"}</code>
-              </p>
-              <p>
-                {selectedReceipt.payment.due?.purpose ?? "Foundation payment"} ·{" "}
-                {money(selectedReceipt.payment.amountPaise)} · {selectedReceipt.payment.method}
-              </p>
-              <p>
-                Payment reference: <code>{selectedReceipt.payment.externalId}</code>
-              </p>
-              {selectedReceipt.payment.providerReference && (
-                <p>
-                  Provider reference: <code>{selectedReceipt.payment.providerReference}</code>
-                </p>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p>No payable dues.</p>
               )}
-              <p>
-                <a
-                  href={`/api/member/receipts/${encodeURIComponent(selectedReceipt.receiptNumber)}/download`}
-                  download
-                >
-                  Download receipt
-                </a>{" "}
-                <button onClick={shareReceipt}>Share receipt</button>
-              </p>
             </article>
-          )}
-        </>
-      )}
-      {(section === "wallet" || section === "dashboard") && (
-        <article>
-          <h2>Foundation Wallet</h2>
-          <p>
-            Available balance: <strong>{money(wallet)}</strong>
-          </p>
-          <p>
-            Wallet credit is issued only by the Foundation and is automatically available for
-            eligible payments.
-          </p>
-          <h3>Recent wallet activity</h3>
-          {walletActivity.length ? (
-            <div aria-label="Recent wallet activity">
-              {walletActivity.map((activity, index) => (
-                <p
-                  key={`${activity.createdAt}-${activity.direction}-${activity.amountPaise}-${activity.balanceAfterPaise}-${index}`}
-                >
-                  <strong>{activity.direction === "CREDIT" ? "Credit" : "Payment"}</strong> ·{" "}
-                  {activity.category} · {money(activity.amountPaise)} · Balance{" "}
-                  {money(activity.balanceAfterPaise)} ·{" "}
-                  {new Date(activity.createdAt).toLocaleDateString()}
+            <article>
+              <h2>Receipts</h2>
+              {receipts.length ? (
+                receipts.map((receipt) => (
+                  <p key={receipt.receiptNumber}>
+                    {receipt.receiptNumber} · {new Date(receipt.issuedAt).toLocaleDateString()}
+                    <button onClick={() => viewReceipt(receipt.receiptNumber)}>View receipt</button>
+                  </p>
+                ))
+              ) : (
+                <p>No receipts yet.</p>
+              )}
+            </article>
+            {selectedReceipt && (
+              <article aria-label="Official payment receipt">
+                <h2>Official receipt</h2>
+                <p>
+                  <strong>{selectedReceipt.receiptNumber}</strong>
                 </p>
-              ))}
-            </div>
+                <p>Issued: {new Date(selectedReceipt.issuedAt).toLocaleString()}</p>
+                <p>Member: {selectedReceipt.payment.member?.fullName ?? "Member"}</p>
+                <p>
+                  Member ID: <code>{selectedReceipt.payment.member?.externalId ?? "—"}</code>
+                </p>
+                <p>
+                  {selectedReceipt.payment.due?.purpose ?? "Foundation payment"} ·{" "}
+                  {money(selectedReceipt.payment.amountPaise)} · {selectedReceipt.payment.method}
+                </p>
+                <p>
+                  Payment reference: <code>{selectedReceipt.payment.externalId}</code>
+                </p>
+                {selectedReceipt.payment.providerReference && (
+                  <p>
+                    Provider reference: <code>{selectedReceipt.payment.providerReference}</code>
+                  </p>
+                )}
+                <p>
+                  <a
+                    href={`/api/member/receipts/${encodeURIComponent(selectedReceipt.receiptNumber)}/download`}
+                    download
+                  >
+                    Download receipt
+                  </a>{" "}
+                  <button onClick={shareReceipt}>Share receipt</button>
+                </p>
+              </article>
+            )}
+          </>
+        )}
+        {(section === "wallet" || section === "dashboard") && (
+          <article>
+            <h2>Foundation Wallet</h2>
+            <p>
+              Available balance: <strong>{loading ? "Loading…" : money(wallet)}</strong>
+            </p>
+            <p>
+              Wallet credit is issued only by the Foundation and is automatically available for
+              eligible payments.
+            </p>
+            <h3>Recent wallet activity</h3>
+            {walletActivity.length ? (
+              <div aria-label="Recent wallet activity">
+                {walletActivity.map((activity, index) => (
+                  <p
+                    key={`${activity.createdAt}-${activity.direction}-${activity.amountPaise}-${activity.balanceAfterPaise}-${index}`}
+                  >
+                    <strong>{activity.direction === "CREDIT" ? "Credit" : "Payment"}</strong> ·{" "}
+                    {activity.category} · {money(activity.amountPaise)} · Balance{" "}
+                    {money(activity.balanceAfterPaise)} ·{" "}
+                    {new Date(activity.createdAt).toLocaleDateString()}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p>No wallet activity yet.</p>
+            )}
+          </article>
+        )}
+        <article>
+          <h2>Recent payments</h2>
+          {payments.length ? (
+            payments.map((payment) => (
+              <p key={payment.externalId}>
+                {payment.method} · {money(payment.amountPaise)} · {payment.status}
+                {payment.canCancel && (
+                  <button onClick={() => void runAction(() => cancelPayment(payment.externalId))}>
+                    Cancel payment
+                  </button>
+                )}
+                {payment.canResume && (
+                  <button onClick={() => void runAction(() => resumePayment(payment.externalId))}>
+                    Resume checkout
+                  </button>
+                )}
+              </p>
+            ))
           ) : (
-            <p>No wallet activity yet.</p>
+            <p>No payments yet.</p>
           )}
         </article>
-      )}
-      <article>
-        <h2>Recent payments</h2>
-        {payments.length ? (
-          payments.map((payment) => (
-            <p key={payment.externalId}>
-              {payment.method} · {money(payment.amountPaise)} · {payment.status}
-              {payment.canCancel && (
-                <button onClick={() => cancelPayment(payment.externalId)}>Cancel payment</button>
-              )}
-            </p>
-          ))
-        ) : (
-          <p>No payments yet.</p>
-        )}
-      </article>
+      </fieldset>
     </main>
   );
 }

@@ -6,10 +6,16 @@ export async function GET(request: NextRequest) {
   try {
     await requireApiPermission(request, "admin:*");
     const plans = await prisma.communitySupportPlan.findMany({
-      where: { status: "PENDING_ADMIN_APPROVAL" },
+      where: {
+        OR: [
+          { status: "PENDING_ADMIN_APPROVAL" },
+          { status: "PENDING_COORDINATOR_APPROVAL", member: { coordinatorId: null } },
+        ],
+      },
       select: {
         externalId: true,
         createdAt: true,
+        status: true,
         member: { select: { externalId: true, fullName: true } },
       },
       orderBy: { createdAt: "asc" },

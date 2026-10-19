@@ -2,13 +2,16 @@ import { z } from "zod";
 
 const MAX_DATABASE_INT = 2_147_483_647n;
 
-export const walletCreditRequestSchema = z.object({
-  amountRupees: z
-    .string()
-    .trim()
-    .regex(/^\d+(?:\.\d{1,2})?$/, "Enter an amount such as 100 or 100.50"),
-  reason: z.string().trim().min(3, "A reason is required").max(500),
-});
+export const walletCreditRequestSchema = z
+  .object({
+    idempotencyKey: z.string().min(16).max(200),
+    amountRupees: z
+      .string()
+      .trim()
+      .regex(/^\d+(?:\.\d{1,2})?$/, "Enter an amount such as 100 or 100.50"),
+    reason: z.string().trim().min(3, "A reason is required").max(500),
+  })
+  .strict();
 
 /** Parses an Admin-entered rupee string without JavaScript floating point. */
 export function rupeeTextToPaise(value: string) {

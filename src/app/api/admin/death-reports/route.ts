@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { listAdminDeathReports } from "../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../server/http/authorize";
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Death report queue denied" },
+      { error: publicErrorMessage(error, "Death report queue denied") },
       { status: 403 },
     );
   }

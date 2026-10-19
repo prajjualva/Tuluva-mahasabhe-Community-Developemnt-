@@ -90,7 +90,14 @@ databaseDescribe("Phase 6 financial persistence safeguards", () => {
       },
     });
     created.dueIds.push(planDue.id);
-    await applyFoundationWalletCredit(member.id, 40_000, "TEST_CREDIT", user.id);
+    await applyFoundationWalletCredit(
+      member.id,
+      40_000,
+      "TEST_CREDIT",
+      user.id,
+      "Synthetic split credit",
+      `split-credit-${user.id}`,
+    );
 
     const firstSplit = await startPlanWalletFirstSplitPayment(
       member.id,
@@ -142,16 +149,59 @@ databaseDescribe("Phase 6 financial persistence safeguards", () => {
     });
     expect(paidDue.status).toBe("PAID");
     expect(progressedPlan.status).toBe("PENDING_COORDINATOR_APPROVAL");
-  }, 60_000);
+    const cancelledDue = await prisma.due.create({
+      data: {
+        memberId: member.id,
+        purpose: "CONTRIBUTION",
+        amountPaise: 10000,
+        dueAt: new Date(Date.now() + 86400000),
+      },
+    });
+    created.dueIds.push(cancelledDue.id);
+    const lateCapture = await createPaymentCommand({
+      memberId: member.id,
+      dueId: cancelledDue.id,
+      method: "ONLINE",
+      idempotencyKey: `late-capture-${marker}`,
+      actorId: user.id,
+    });
+    await prisma.due.update({ where: { id: cancelledDue.id }, data: { status: "WAIVED" } });
+    const captured = await settlePayment(lateCapture.id, user.id, `late-provider-${marker}`);
+    expect(captured.payment.status).toBe("SUCCEEDED");
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: cancelledDue.id } })).status).toBe(
+      "WAIVED",
+    );
+    expect(
+      await prisma.foundationLedger.count({
+        where: { relatedExternalId: lateCapture.externalId, purpose: "UNAPPLIED_PAYMENT" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: lateCapture.id, action: "UNAPPLIED_PAYMENT_REQUIRES_REFUND_REVIEW" },
+      }),
+    ).toBe(1);
+    expect(
+      (await settlePayment(lateCapture.id, user.id, `late-provider-${marker}`)).alreadySettled,
+    ).toBe(true);
+    await expect(
+      settlePayment(lateCapture.id, user.id, `different-reference-${marker}`),
+    ).rejects.toThrow("reference");
+  }, 120_000);
 });
 
 afterAll(async () => {
   if (!runDatabaseTests || !created.userId) return;
+  await prisma.notification.deleteMany({ where: { userId: created.userId } });
+  await prisma.walletCreditCommand.deleteMany({ where: { memberId: created.memberId } });
   // This is test-only cleanup. Keep each remote Neon operation short so the
   // cleanup itself cannot exceed Prisma's default interactive transaction TTL.
   const payments = await prisma.payment.findMany({
     where: { memberId: created.memberId },
-    select: { id: true },
+    select: { id: true, externalId: true },
+  });
+  await prisma.notification.deleteMany({
+    where: { relatedExternalId: { in: payments.map((payment) => payment.externalId) } },
   });
   if (payments.length)
     await prisma.receipt.deleteMany({ where: { paymentId: { in: payments.map((p) => p.id) } } });
@@ -171,4 +221,4 @@ afterAll(async () => {
   if (created.memberId) await prisma.member.deleteMany({ where: { id: created.memberId } });
   await prisma.user.deleteMany({ where: { id: created.userId } });
   await prisma.$disconnect();
-});
+}, 90_000);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { publicErrorMessage } from "../../../../server/http/public-error";
 
 /**
  * Keep authentication failures distinct from validation/workflow failures without
@@ -20,5 +21,5 @@ export function supportRouteError(error: unknown, fallback: string) {
           ? 404
           : 400;
 
-  return NextResponse.json({ error: message || fallback }, { status });
+  return NextResponse.json({ error: publicErrorMessage(error, fallback) }, { status });
 }

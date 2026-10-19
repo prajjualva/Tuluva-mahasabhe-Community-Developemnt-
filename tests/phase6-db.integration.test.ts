@@ -52,13 +52,19 @@ databaseDescribe("Phase 6 Neon payment integration", () => {
 
 afterAll(async () => {
   if (!runDatabaseTests || !created.userId) return;
-  await prisma.$transaction(async (tx) => {
-    if (created.paymentId) await tx.receipt.deleteMany({ where: { paymentId: created.paymentId } });
-    if (created.paymentId) await tx.payment.deleteMany({ where: { id: created.paymentId } });
-    if (created.dueId) await tx.due.deleteMany({ where: { id: created.dueId } });
-    await tx.auditLog.deleteMany({ where: { actorId: created.userId } });
-    if (created.memberId) await tx.member.deleteMany({ where: { id: created.memberId } });
-    await tx.user.deleteMany({ where: { id: created.userId } });
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.notification.deleteMany({ where: { userId: created.userId } });
+      await tx.foundationLedger.deleteMany({ where: { authorizedActorId: created.userId } });
+      if (created.paymentId)
+        await tx.receipt.deleteMany({ where: { paymentId: created.paymentId } });
+      if (created.paymentId) await tx.payment.deleteMany({ where: { id: created.paymentId } });
+      if (created.dueId) await tx.due.deleteMany({ where: { id: created.dueId } });
+      await tx.auditLog.deleteMany({ where: { actorId: created.userId } });
+      if (created.memberId) await tx.member.deleteMany({ where: { id: created.memberId } });
+      await tx.user.deleteMany({ where: { id: created.userId } });
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
   await prisma.$disconnect();
-});
+}, 90_000);

@@ -4,6 +4,10 @@ import { PERMISSIONS } from "../src/server/auth/authorization";
 import { SCHEME_DEFAULTS } from "../src/domain/scheme-settings";
 const prisma = new PrismaClient();
 async function main() {
+  if (process.env.NODE_ENV === "production")
+    throw new Error(
+      "Development seeding is disabled in production. Use the audited Admin bootstrap process.",
+    );
   const passwordHash = await hashPassword("DevelopmentOnly-ChangeMe1!");
   const permissionRows = await Promise.all(
     PERMISSIONS.map((code) =>

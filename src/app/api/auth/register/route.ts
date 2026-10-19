@@ -9,10 +9,17 @@ import {
   ThrottleError,
 } from "../../../../server/auth/login-throttle";
 import { registerMemberPersistently } from "../../../../server/members/registration-service";
+import { consumeRateLimit, privateRateLimitKey } from "../../../../server/security/rate-limit";
+import { ZodError } from "zod";
 
 export async function POST(request: NextRequest) {
   const key = registrationThrottleKey(clientAddress(request.headers));
   try {
+    await consumeRateLimit(
+      privateRateLimitKey("registration-requests", clientAddress(request.headers)),
+      10,
+      15 * 60000,
+    );
     await assertLoginAllowed(key);
     const member = await registerMemberPersistently(await request.json());
     await clearLoginFailures(key);
@@ -27,7 +34,14 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Registration failed" },
+      {
+        error:
+          error instanceof ZodError
+            ? "Please check your name, contact details, referral code and password."
+            : error instanceof Error && error.message === "Referral code is invalid or inactive"
+              ? error.message
+              : "Registration could not be completed",
+      },
       { status: 400 },
     );
   }

@@ -147,13 +147,20 @@ describe("online payment-provider boundary", () => {
     const provider = configured.provider;
     const rawBody = JSON.stringify({
       event: "payment.captured",
+      created_at: 1_788_912_000,
       payload: {
         payment: {
           entity: {
             id: "pay_real_gateway_123",
             order_id: "order_real_gateway_123",
+            amount: 36900,
+            currency: "INR",
             created_at: 1_788_912_000,
-            notes: { foundation_payment_external_id: paymentExternalId },
+            notes: {
+              foundation_payment_external_id: paymentExternalId,
+              password: "secret-never-persist",
+            },
+            card: { last4: "1234" },
           },
         },
       },
@@ -170,11 +177,25 @@ describe("online payment-provider boundary", () => {
       paymentExternalId,
       providerOrderId: "order_real_gateway_123",
       providerReference: "pay_real_gateway_123",
+      amountPaise: 36900,
+      currency: "INR",
       occurredAt: new Date("2026-09-09T00:00:00.000Z"),
     });
     expect(() => provider.verifyWebhook(rawBody, "not-a-valid-signature")).toThrow(
       PaymentProviderSignatureError,
     );
+    expect(JSON.stringify(provider.verifyWebhook(rawBody, signature).payload)).not.toMatch(
+      /secret-never-persist|card|last4/,
+    );
+    for (const replacement of [{ amount: 1.25 }, { amount: -100 }, { currency: "USD" }]) {
+      const invalid = JSON.parse(rawBody);
+      Object.assign(invalid.payload.payment.entity, replacement);
+      const body = JSON.stringify(invalid);
+      const signed = createHmac("sha256", environment.RAZORPAY_WEBHOOK_SECRET)
+        .update(body)
+        .digest("hex");
+      expect(() => provider.verifyWebhook(body, signed)).toThrow();
+    }
   });
 
   it("normalizes a signed processed-refund webhook using the Foundation refund UUID", () => {
@@ -183,6 +204,7 @@ describe("online payment-provider boundary", () => {
     const refundExternalId = "8b8a1c80-341f-4450-9683-7c7bc3435ae2";
     const rawBody = JSON.stringify({
       event: "refund.processed",
+      created_at: 1_788_912_000,
       payload: {
         refund: {
           entity: {

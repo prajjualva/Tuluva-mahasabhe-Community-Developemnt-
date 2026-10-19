@@ -1,45 +1,29 @@
+import { MemberNavigation } from "./member-navigation";
 import Link from "next/link";
 import { SignOutButton } from "./sign-out-button";
-const navigation = [
-  "Dashboard",
-  "Profile",
-  "Membership",
-  "Community Support Plan",
-  "Nominee",
-  "Dues",
-  "Payments & Receipts",
-  "Wallet",
-  "Notifications",
-  "Coordinator",
-];
 export default function MemberLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="shell">
-      <aside>
-        <h1>Community Support</h1>
-        <p>Member portal</p>
-        <nav>
-          {navigation.map((item) => (
-            <Link
-              key={item}
-              href={
-                item === "Dashboard"
-                  ? "/member"
-                  : `/member/${item.toLowerCase().replaceAll(" ", "-").replace("&-", "")}`
-              }
-            >
-              {item}
-            </Link>
-          ))}
-        </nav>
-        <p>
-          <Link href="/death-support-events">Death Support Events</Link>
-          <br />
-          <Link href="/death-report">Report a death</Link>
-        </p>
+      <aside className="portal-sidebar">
+        <Link className="brand-lockup" href="/">
+          <span className="brand-seal" aria-hidden="true">
+            CS
+          </span>
+          <span>
+            Community Support<small>FOUNDATION</small>
+          </span>
+        </Link>
+        <p className="portal-role">Member workspace</p>
+        <MemberNavigation />
         <SignOutButton />
       </aside>
-      <section>{children}</section>
+      <section className="workspace">
+        <header className="workspace-topbar">
+          <span>Here for our community</span>
+          <span className="access-pill">Member access</span>
+        </header>
+        {children}
+      </section>
     </div>
   );
 }

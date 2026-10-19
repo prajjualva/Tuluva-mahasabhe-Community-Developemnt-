@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../server/http/public-error";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -74,8 +75,7 @@ export async function POST(request: NextRequest) {
         {
           ...result,
           documents,
-          documentError:
-            error instanceof Error ? error.message : "Evidence upload could not be completed",
+          documentError: publicErrorMessage(error, "Evidence upload could not be completed"),
         },
         { status: 207, headers: { "Cache-Control": "no-store" } },
       );
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof ThrottleError)
       return NextResponse.json({ error: error.message }, { status: 429 });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Death report could not be submitted" },
+      { error: publicErrorMessage(error, "Death report could not be submitted") },
       { status: 400 },
     );
   }

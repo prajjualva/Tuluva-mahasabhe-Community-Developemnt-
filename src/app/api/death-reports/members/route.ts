@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import {
   clientAddress,
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof ThrottleError)
       return NextResponse.json({ error: error.message }, { status: 429 });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Member search denied" },
+      { error: publicErrorMessage(error, "Member search denied") },
       { status: 400 },
     );
   }

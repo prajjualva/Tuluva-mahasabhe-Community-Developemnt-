@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "../database/prisma";
 
@@ -14,12 +14,21 @@ export async function signAccessToken(userId: string, permissions: string[]) {
   return new SignJWT({ permissions })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
+    .setJti(randomUUID())
+    .setIssuer("community-support-foundation")
+    .setAudience("foundation-web")
     .setIssuedAt()
     .setExpirationTime("15m")
     .sign(sessionSecret());
 }
 export async function verifyAccessToken(token: string) {
-  const verified = await jwtVerify(token, sessionSecret());
+  const verified = await jwtVerify(token, sessionSecret(), {
+    algorithms: ["HS256"],
+    issuer: "community-support-foundation",
+    audience: "foundation-web",
+  });
+  if (typeof verified.payload.sub !== "string" || !/^[0-9a-f-]{36}$/i.test(verified.payload.sub))
+    throw new Error("Invalid session identity");
   return {
     userId: verified.payload.sub!,
     permissions: new Set((verified.payload.permissions as string[] | undefined) ?? []),

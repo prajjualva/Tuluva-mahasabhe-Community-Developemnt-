@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import {
   addCondolenceComment,
@@ -33,7 +34,7 @@ export async function POST(
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Comment could not be posted" },
+      { error: publicErrorMessage(error, "Comment could not be posted") },
       { status: 400 },
     );
   }

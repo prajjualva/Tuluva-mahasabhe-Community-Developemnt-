@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
 import {
@@ -22,7 +23,7 @@ export async function POST(
     return NextResponse.json({ externalId: payment.externalId, status: payment.status });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Payment could not be cancelled" },
+      { error: publicErrorMessage(error, "Payment could not be cancelled") },
       { status: 400 },
     );
   }

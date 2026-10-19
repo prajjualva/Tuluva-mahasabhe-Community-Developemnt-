@@ -10,6 +10,7 @@ import {
   type DeathEvidenceFile,
 } from "../documents/death-document-storage";
 import { requestPaymentRefund } from "../payments/payment-refund-service";
+import { createInAppNotificationInTransaction } from "../notifications/notification-service";
 
 const RETRIABLE_TRANSACTION_CODES = new Set(["P2002", "P2034"]);
 
@@ -68,7 +69,12 @@ type EligibilityMember = {
   status: string;
   joinedAt?: Date;
   memberships: Array<{ status: string; startedAt: Date; endedAt: Date | null }>;
-  plans: Array<{ status: string; activatedAt: Date | null; waitingEndsAt: Date | null }>;
+  plans: Array<{
+    status: string;
+    activatedAt: Date | null;
+    waitingEndsAt: Date | null;
+    endedAt?: Date | null;
+  }>;
   nominees: Array<{ id: string; kind: string; status: string; isCurrent: boolean }>;
 };
 
@@ -120,12 +126,16 @@ export function evaluateDeathSupportEligibility(
       reason: "MEMBERSHIP_NOT_STARTED_AT_DEATH",
       verifiedNomineeId: primary?.id ?? null,
     };
-  const plan = member.plans.find(
-    (candidate) =>
-      candidate.status === "ACTIVE" &&
-      candidate.activatedAt !== null &&
-      candidate.activatedAt.getTime() <= dateOfDeath.getTime(),
-  );
+  const plan = [...member.plans]
+    .sort((a, b) => (b.activatedAt?.getTime() ?? 0) - (a.activatedAt?.getTime() ?? 0))
+    .find(
+      (candidate) =>
+        (["ACTIVE", "SUSPENDED"].includes(candidate.status) ||
+          (candidate.status === "CANCELLED" && candidate.endedAt)) &&
+        candidate.activatedAt !== null &&
+        candidate.activatedAt.getTime() <= dateOfDeath.getTime() &&
+        (!candidate.endedAt || candidate.endedAt >= dateOfDeath),
+    );
 
   const statusAtDeath = membershipStatusAtDeath(member.memberships, member.status, dateOfDeath);
   if (statusAtDeath === "INACTIVE" || statusAtDeath === "CLOSED")
@@ -200,8 +210,9 @@ const reportMemberSelect = {
   status: true,
   joinedAt: true,
   coordinatorId: true,
+  coordinator: { select: { member: { select: { userId: true } } } },
   plans: {
-    select: { status: true, activatedAt: true, waitingEndsAt: true },
+    select: { status: true, activatedAt: true, waitingEndsAt: true, endedAt: true },
     orderBy: { createdAt: "desc" as const },
   },
   memberships: { select: { status: true, startedAt: true, endedAt: true } },
@@ -295,6 +306,18 @@ export async function submitDeathReport(
         },
       },
     });
+    const coordinatorUserId = member?.coordinator?.member.userId;
+    if (coordinatorUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: coordinatorUserId,
+        type: "DEATH_REPORT",
+        title: "Death report received",
+        body: "A death report for one of your assigned members has been received. Review the Coordinator queue if confirmation is required.",
+        template: "DEATH_REPORT_SUBMITTED",
+        relatedExternalId: deathCase.externalId,
+        idempotencyKey: `death-report:${deathCase.id}:coordinator-notified`,
+      });
+    }
     return {
       outcome: member ? ("CREATED" as const) : ("MEMBER_NOT_FOUND" as const),
       case: {
@@ -603,6 +626,7 @@ export async function reviewDeathReportByAdmin(
             id: true,
             status: true,
             joinedAt: true,
+            coordinator: { select: { member: { select: { userId: true } } } },
             plans: {
               select: { status: true, activatedAt: true, waitingEndsAt: true },
               orderBy: { createdAt: "desc" },
@@ -643,6 +667,18 @@ export async function reviewDeathReportByAdmin(
           afterState: { status: rejected.status },
         },
       });
+      const coordinatorUserId = deathCase.member?.coordinator?.member.userId;
+      if (coordinatorUserId) {
+        await createInAppNotificationInTransaction(tx, {
+          userId: coordinatorUserId,
+          type: "DEATH_SUPPORT_EVENT_REJECTED",
+          title: "Death Support report rejected",
+          body: "The Foundation completed review of a death report for an assigned member and did not approve a Death Support Event.",
+          template: "DEATH_REPORT_REJECTED",
+          relatedExternalId: rejected.externalId,
+          idempotencyKey: `death-report:${deathCase.id}:rejected`,
+        });
+      }
       return { decision: "REJECTED" as const, case: rejected, event: null };
     }
 
@@ -732,6 +768,18 @@ export async function reviewDeathReportByAdmin(
         },
       },
     });
+    const coordinatorUserId = deathCase.member.coordinator?.member.userId;
+    if (coordinatorUserId) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: coordinatorUserId,
+        type: "DEATH_SUPPORT_EVENT_APPROVED",
+        title: "Death Support Event approved",
+        body: "The Foundation approved a Death Support Event for an assigned member. Contributions will be generated only when the event is published.",
+        template: "DEATH_REPORT_APPROVED",
+        relatedExternalId: event.externalId,
+        idempotencyKey: `death-event:${event.id}:coordinator-approved`,
+      });
+    }
     return {
       decision: "APPROVED" as const,
       case: updatedCase,
@@ -759,6 +807,27 @@ export async function publishDeathSupportEvent(eventExternalId: string, actorId:
       data: { publishedById: actorId },
       select: { externalId: true, status: true, publishedAt: true },
     });
+    const recipients = await tx.contribution.findMany({
+      where: { event: { externalId: eventExternalId } },
+      select: { member: { select: { userId: true } } },
+    });
+    if (recipients.length) {
+      await tx.notification.createMany({
+        data: recipients.map((recipient) => ({
+          userId: recipient.member.userId,
+          channel: "IN_APP",
+          type: "DEATH_SUPPORT_EVENT_APPROVED",
+          title: "Death Support Event published",
+          body: "A verified Death Support Event has been published. A separate ₹100 contribution due is available in your member portal.",
+          template: "DEATH_SUPPORT_EVENT_PUBLISHED",
+          relatedExternalId: event.externalId,
+          payload: { eventExternalId: event.externalId },
+          idempotencyKey: `death-event:${event.externalId}:published:${recipient.member.userId}`,
+          sentAt: new Date(),
+        })),
+        skipDuplicates: true,
+      });
+    }
     return { ...result, event };
   });
 }

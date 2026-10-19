@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { processMembershipDueExpiry } from "../../../../../server/membership/due-expiry-service";
+import { processMembershipLifecycle } from "../../../../../server/membership/membership-lifecycle-service";
 
 export async function POST(request: NextRequest) {
   const secret = process.env.INTERNAL_JOB_SECRET;
@@ -12,5 +12,5 @@ export async function POST(request: NextRequest) {
     !timingSafeEqual(Buffer.from(secret), Buffer.from(supplied))
   )
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json(await processMembershipDueExpiry());
+  return NextResponse.json(await processMembershipLifecycle());
 }

@@ -1,5 +1,8 @@
 import { assertPositiveMoney } from "../../domain/money";
+import { z } from "zod";
+import { refreshMembershipFinancialStatus } from "../membership/membership-lifecycle-service";
 import { advancePlanAfterRegistrationPayment } from "../plans/plan-service";
+import { notifyMemberByMemberIdInTransaction } from "../notifications/notification-service";
 import {
   assertDuePayable,
   assertNoPendingPaymentForDue,
@@ -12,10 +15,25 @@ export async function applyFoundationWalletCredit(
   amountPaise: number,
   purpose: string,
   actorId: string,
-  reason?: string,
+  reason: string | undefined,
+  idempotencyKey: string,
 ) {
   assertPositiveMoney(amountPaise);
+  z.string().trim().min(3).max(1000).parse(reason);
+  z.string().min(16).max(200).parse(idempotencyKey);
   return runSerializablePaymentTransaction(async (tx) => {
+    const prior = await tx.walletCreditCommand.findUnique({ where: { idempotencyKey } });
+    if (prior) {
+      if (
+        prior.memberId !== memberId ||
+        prior.actorId !== actorId ||
+        prior.amountPaise !== amountPaise ||
+        prior.purpose !== purpose ||
+        prior.reason !== reason?.trim()
+      )
+        throw new Error("Idempotency key is already in use");
+      return tx.walletTransaction.findUniqueOrThrow({ where: { id: prior.walletTransactionId } });
+    }
     const wallet = await tx.wallet.upsert({
       where: { memberId },
       update: {},
@@ -36,6 +54,17 @@ export async function applyFoundationWalletCredit(
         purpose,
       },
     });
+    const command = await tx.walletCreditCommand.create({
+      data: {
+        idempotencyKey,
+        memberId,
+        actorId,
+        amountPaise,
+        purpose,
+        reason: reason!.trim(),
+        walletTransactionId: entry.id,
+      },
+    });
     await tx.auditLog.create({
       data: {
         actorId,
@@ -51,10 +80,19 @@ export async function applyFoundationWalletCredit(
         direction: "CREDIT",
         amountPaise,
         purpose: `WALLET_${purpose}`,
-        relatedExternalId: entry.relatedExternalId,
+        relatedExternalId: command.externalId,
+        reference: command.externalId,
         authorizedActorId: actorId,
         status: "SUCCEEDED",
       },
+    });
+    await notifyMemberByMemberIdInTransaction(tx, {
+      memberId,
+      type: "WALLET_CREDIT",
+      title: "Foundation Wallet credited",
+      body: "A Foundation Wallet credit has been added to your account. Review your wallet activity for the current balance.",
+      template: "WALLET_CREDIT",
+      idempotencyKey: `wallet-credit:${entry.id}`,
     });
     return entry;
   });
@@ -112,6 +150,7 @@ export async function payDueFromWallet(
     await tx.due.update({ where: { id: dueId }, data: { status: "PAID", paidAt: new Date() } });
     if (due.purpose === "PLAN_REGISTRATION" && due.planId)
       await advancePlanAfterRegistrationPayment(tx, due.planId);
+    if (due.purpose === "MEMBERSHIP") await refreshMembershipFinancialStatus(tx, memberId);
     const receipt = await tx.receipt.create({
       data: {
         paymentId: payment.id,
@@ -135,6 +174,26 @@ export async function payDueFromWallet(
         authorizedActorId: actorId,
         status: "SUCCEEDED",
       },
+    });
+    await notifyMemberByMemberIdInTransaction(tx, {
+      memberId,
+      type: "WALLET_PAYMENT",
+      title: "Wallet payment received",
+      body: `Your Foundation Wallet payment was applied successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`,
+      template: "WALLET_PAYMENT_SETTLED",
+      relatedExternalId: payment.externalId,
+      payload: { receiptNumber: receipt.receiptNumber, duePurpose: due.purpose },
+      idempotencyKey: `wallet-payment:${payment.id}`,
+    });
+    await notifyMemberByMemberIdInTransaction(tx, {
+      memberId,
+      type: "RECEIPT_GENERATED",
+      title: "Official receipt generated",
+      body: `Official receipt ${receipt.receiptNumber} is ready for your Wallet payment.`,
+      template: "RECEIPT_GENERATED",
+      relatedExternalId: payment.externalId,
+      payload: { receiptNumber: receipt.receiptNumber },
+      idempotencyKey: `receipt:${receipt.id}:generated`,
     });
     return { payment, entry, receipt, alreadyProcessed: false };
   });
@@ -247,6 +306,26 @@ export async function startPlanWalletFirstSplitPayment(
           status: "SUCCEEDED",
         },
       });
+      await notifyMemberByMemberIdInTransaction(tx, {
+        memberId,
+        type: "WALLET_PAYMENT",
+        title: "Wallet payment received",
+        body: `Your Foundation Wallet payment was applied successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`,
+        template: "WALLET_PAYMENT_SETTLED",
+        relatedExternalId: payment.externalId,
+        payload: { receiptNumber: receipt.receiptNumber, duePurpose: due.purpose },
+        idempotencyKey: `wallet-payment:${payment.id}`,
+      });
+      await notifyMemberByMemberIdInTransaction(tx, {
+        memberId,
+        type: "RECEIPT_GENERATED",
+        title: "Official receipt generated",
+        body: `Official receipt ${receipt.receiptNumber} is ready for your Wallet payment.`,
+        template: "RECEIPT_GENERATED",
+        relatedExternalId: payment.externalId,
+        payload: { receiptNumber: receipt.receiptNumber },
+        idempotencyKey: `receipt:${receipt.id}:generated`,
+      });
       return {
         onlinePayment: payment,
         walletPayment: payment,
@@ -308,6 +387,29 @@ export async function startPlanWalletFirstSplitPayment(
           entityId: walletPayment.id,
           afterState: { splitPlanPayment: true },
         },
+      });
+      const walletReceipt = await tx.receipt.findUniqueOrThrow({
+        where: { paymentId: walletPayment.id },
+      });
+      await notifyMemberByMemberIdInTransaction(tx, {
+        memberId,
+        type: "WALLET_PAYMENT",
+        title: "Wallet balance applied to your plan payment",
+        body: `Part of your ₹1,000 Community Support Plan payment was paid from your Foundation Wallet. Receipt ${walletReceipt.receiptNumber} is available in your member portal.`,
+        template: "PLAN_WALLET_SPLIT_PAYMENT",
+        relatedExternalId: walletPayment.externalId,
+        payload: { receiptNumber: walletReceipt.receiptNumber, splitPlanPayment: true },
+        idempotencyKey: `wallet-payment:${walletPayment.id}`,
+      });
+      await notifyMemberByMemberIdInTransaction(tx, {
+        memberId,
+        type: "RECEIPT_GENERATED",
+        title: "Official receipt generated",
+        body: `Official receipt ${walletReceipt.receiptNumber} is ready for the Wallet portion of your plan payment.`,
+        template: "RECEIPT_GENERATED",
+        relatedExternalId: walletPayment.externalId,
+        payload: { receiptNumber: walletReceipt.receiptNumber },
+        idempotencyKey: `receipt:${walletReceipt.id}:generated`,
       });
     }
     const onlinePayment = await tx.payment.create({

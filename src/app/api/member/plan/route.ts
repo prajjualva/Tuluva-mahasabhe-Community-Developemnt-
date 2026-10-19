@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "../../../../server/http/authorize";
 import { memberIdForUser } from "../../../../server/payments/payment-service";
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Request denied" },
+      { error: publicErrorMessage(error, "Request denied") },
       { status: 400 },
     );
   }

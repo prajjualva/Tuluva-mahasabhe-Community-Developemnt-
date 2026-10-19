@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:verify": "node scripts/verify-production-build.mjs",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
@@ -16,8 +17,9 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:deploy": "node scripts/deploy-migrations.mjs",
+    "db:seed": "tsx prisma/seed.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.15.0",

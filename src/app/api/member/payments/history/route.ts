@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "../../../../../server/http/authorize";
 import { memberIdForUser } from "../../../../../server/payments/payment-service";
 import { prisma } from "../../../../../server/database/prisma";
+import { isDuePayable } from "../../../../../server/payments/payment-integrity";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
         method: true,
         status: true,
         providerOrderId: true,
+        due: { select: { purpose: true, status: true, dueAt: true } },
         createdAt: true,
         receipt: { select: { receiptNumber: true } },
         refund: { select: { status: true } },
@@ -33,6 +35,10 @@ export async function GET(request: NextRequest) {
           payment.status === "PENDING" &&
           payment.method === "ONLINE" &&
           payment.providerOrderId === null,
+        canResume:
+          payment.status === "PENDING" &&
+          payment.method === "ONLINE" &&
+          Boolean(payment.due && isDuePayable(payment.due)),
       })),
     );
   } catch {

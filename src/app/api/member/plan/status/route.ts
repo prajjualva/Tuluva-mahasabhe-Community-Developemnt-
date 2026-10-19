@@ -7,6 +7,10 @@ export async function GET(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:read");
     const memberId = await memberIdForUser(principal.userId);
+    const member = await prisma.member.findUniqueOrThrow({
+      where: { id: memberId },
+      select: { coordinatorProfile: { select: { id: true } } },
+    });
     const plan = await prisma.communitySupportPlan.findFirst({
       where: { memberId },
       orderBy: { createdAt: "desc" },
@@ -18,7 +22,10 @@ export async function GET(request: NextRequest) {
         createdAt: true,
       },
     });
-    return NextResponse.json(plan ?? { status: "NOT_REGISTERED" });
+    return NextResponse.json({
+      ...(plan ?? { status: "NOT_REGISTERED" }),
+      feeExempt: Boolean(member.coordinatorProfile),
+    });
   } catch {
     return NextResponse.json({ error: "Request denied" }, { status: 403 });
   }

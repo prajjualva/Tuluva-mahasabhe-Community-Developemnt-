@@ -1,7 +1,9 @@
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { SCHEME_DEFAULTS } from "../../domain/scheme-settings";
 import { prisma } from "../database/prisma";
+import { effectiveSchemeNumber } from "../database/scheme-policy";
 
 const contributionGenerationInput = z.object({
   eventExternalId: z.string().uuid(),
@@ -15,12 +17,20 @@ export type ContributionGenerationInput = z.input<typeof contributionGenerationI
 
 type ContributionGenerationTransaction = Pick<
   Prisma.TransactionClient,
-  "contributionEvent" | "member" | "due" | "contribution" | "auditLog"
+  | "contributionEvent"
+  | "member"
+  | "due"
+  | "contribution"
+  | "auditLog"
+  | "notification"
+  | "schemeSettingVersion"
 >;
 
 type ObligationCandidate = {
   id: string;
   joinedAt: Date;
+  userId?: string;
+  deceasedAt?: Date | null;
 };
 
 const addUtcDays = (date: Date, days: number) =>
@@ -41,6 +51,7 @@ export function contributionObligationMemberIds(
     .filter(
       (member) =>
         member.joinedAt.getTime() <= eventCreatedAt.getTime() &&
+        (!member.deceasedAt || member.deceasedAt > eventCreatedAt) &&
         !existingMemberIds.has(member.id) &&
         member.id !== excludedMemberId,
     )
@@ -95,41 +106,76 @@ export async function generateContributionDuesInTransaction(
   const candidates = await tx.member.findMany({
     where: {
       joinedAt: { lte: event.createdAt },
+      OR: [{ deceasedAt: null }, { deceasedAt: { gt: event.createdAt } }],
       ...(event.deathCase?.memberId ? { id: { not: event.deathCase.memberId } } : {}),
       contributions: { none: { eventId: event.id } },
     },
-    select: { id: true, joinedAt: true },
+    select: { id: true, joinedAt: true, userId: true, deceasedAt: true, status: true },
   });
-  const dueAt = contributionDueDeadline(publishedAt);
+  const dueAt = addUtcDays(
+    publishedAt,
+    await effectiveSchemeNumber(tx, "contributionDueDays", publishedAt),
+  );
+  const amountPaise = await effectiveSchemeNumber(tx, "deathContributionPaise", publishedAt);
   const dueExternalIds: string[] = [];
 
-  for (const memberId of contributionObligationMemberIds(
+  const eligibleMemberIds = contributionObligationMemberIds(
     candidates,
     event.createdAt,
     new Set(),
     event.deathCase?.memberId,
-  )) {
-    // Both rows are written in this same transaction. If the unique
-    // Contribution(eventId, memberId) key collides during a concurrent replay,
-    // the whole transaction rolls back and the outer retry rereads the event.
-    const due = await tx.due.create({
-      data: {
-        memberId,
-        purpose: "CONTRIBUTION",
-        amountPaise: SCHEME_DEFAULTS.deathContributionPaise,
-        dueAt,
-      },
-      select: { id: true, externalId: true },
-    });
-    await tx.contribution.create({
-      data: {
+  );
+  // Preallocate UUIDs so the entire event is generated with bulk writes rather
+  // than three remote database round trips per member. The event/member unique
+  // constraint still rolls back the entire transaction on a concurrent replay.
+  const deceasedMemberIds = new Set(
+    candidates
+      .filter((candidate) => candidate.status === "DECEASED")
+      .map((candidate) => candidate.id),
+  );
+  const dues = eligibleMemberIds.map((memberId) => ({
+    id: randomUUID(),
+    externalId: randomUUID(),
+    memberId,
+    purpose: "CONTRIBUTION",
+    amountPaise,
+    dueAt,
+    // Preserve a historical obligation but immediately waive it if death was
+    // recorded after the event cutoff and before this publication command.
+    status: deceasedMemberIds.has(memberId) ? ("WAIVED" as const) : ("PENDING" as const),
+  }));
+  if (dues.length) {
+    await tx.due.createMany({ data: dues });
+    await tx.contribution.createMany({
+      data: dues.map((due) => ({
         eventId: event.id,
-        memberId,
-        amountPaise: SCHEME_DEFAULTS.deathContributionPaise,
+        memberId: due.memberId,
+        amountPaise: due.amountPaise,
         dueId: due.id,
-      },
+      })),
     });
-    dueExternalIds.push(due.externalId);
+    const recipients = new Map(candidates.map((candidate) => [candidate.id, candidate.userId]));
+    const notifications = dues.flatMap((due) => {
+      const userId = recipients.get(due.memberId);
+      if (!userId || due.status === "WAIVED") return [];
+      return [
+        {
+          userId,
+          channel: "IN_APP",
+          type: "EVENT_CONTRIBUTION_DUE",
+          title: "₹100 Death Support contribution due",
+          body: "A new approved Death Support Event has created a ₹100 contribution due. Review and pay it in your member portal before its deadline.",
+          template: "EVENT_CONTRIBUTION_DUE_CREATED",
+          relatedExternalId: event.externalId,
+          payload: { eventExternalId: event.externalId, dueExternalId: due.externalId },
+          idempotencyKey: `contribution-due:${event.id}:${due.memberId}`,
+          sentAt: new Date(),
+        },
+      ];
+    });
+    if (notifications.length)
+      await tx.notification.createMany({ data: notifications, skipDuplicates: true });
+    dueExternalIds.push(...dues.map((due) => due.externalId));
   }
 
   if (newlyPublished) {
@@ -186,7 +232,11 @@ export async function generateContributionDuesForApprovedEvent(
     try {
       return await prisma.$transaction(
         (tx) => generateContributionDuesInTransaction(tx, rawInput),
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          maxWait: 10000,
+          timeout: 30000,
+        },
       );
     } catch (error) {
       if (!isRetriableTransactionError(error) || attempt === 2) throw error;

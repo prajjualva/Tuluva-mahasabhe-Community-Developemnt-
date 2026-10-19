@@ -1,10 +1,12 @@
 node_modules/
 .npm-cache/
 .next/
+.next-validation/
 coverage/
 .env
 .env.local
 *.log
 *.tsbuildinfo
 uploads/
+uploads-ci/
 prisma/*.db

@@ -1,3 +1,4 @@
+import { publicErrorMessage } from "../../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
@@ -47,7 +48,7 @@ export async function POST(
         { status: 409 },
       );
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Refund request denied" },
+      { error: publicErrorMessage(error, "Refund request denied") },
       { status: 400 },
     );
   }

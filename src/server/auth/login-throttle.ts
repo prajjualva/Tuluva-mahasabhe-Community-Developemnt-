@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { prisma } from "../database/prisma";
+import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES = 5;
@@ -53,7 +54,7 @@ export async function assertLoginAllowed(key: string, now = new Date()) {
 }
 
 export async function recordLoginFailure(key: string, now = new Date()) {
-  await prisma.$transaction(async (tx) => {
+  await runSerializablePaymentTransaction(async (tx) => {
     const current = await tx.loginThrottle.findUnique({ where: { key } });
     const inWindow = current && now.getTime() - current.windowStartedAt.getTime() < WINDOW_MS;
     const failures = (inWindow ? current.failures : 0) + 1;
@@ -84,7 +85,7 @@ export async function clearLoginFailures(key: string) {
  * enumeration without persisting an IP address.
  */
 export async function consumePublicDeathReportRequest(key: string, now = new Date()) {
-  const allowed = await prisma.$transaction(async (tx) => {
+  const allowed = await runSerializablePaymentTransaction(async (tx) => {
     const current = await tx.loginThrottle.findUnique({ where: { key } });
     const inWindow = current && now.getTime() - current.windowStartedAt.getTime() < WINDOW_MS;
     const used = inWindow ? current.failures : 0;

@@ -18,7 +18,12 @@ export async function requirePermissionForAccessToken(token: string, permission:
           role: { select: { permissions: { select: { permission: { select: { code: true } } } } } },
         },
       },
-      member: { select: { coordinatorProfile: { select: { isSuspended: true, status: true } } } },
+      member: {
+        select: {
+          status: true,
+          coordinatorProfile: { select: { isSuspended: true, status: true } },
+        },
+      },
     },
   });
   if (!user || user.status !== "ACTIVE") throw new Error("Unauthenticated");
@@ -28,6 +33,13 @@ export async function requirePermissionForAccessToken(token: string, permission:
     ),
   );
   const coordinator = user.member?.coordinatorProfile;
+  if (
+    user.member &&
+    ["CLOSED", "DECEASED"].includes(user.member.status) &&
+    !permissions.has("admin:*") &&
+    permission !== "member:cash:remit"
+  )
+    throw new Error("Membership access is closed; contact Foundation Admin");
   const principal = {
     userId: tokenPrincipal.userId,
     permissions,

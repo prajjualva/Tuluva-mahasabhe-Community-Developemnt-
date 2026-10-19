@@ -1,12 +1,8 @@
 import { Prisma, PlanStatus } from "@prisma/client";
-import { MONEY } from "../../domain/money";
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
-
-const sixMonthsFrom = (from: Date) => {
-  const result = new Date(from);
-  result.setUTCMonth(result.getUTCMonth() + 6);
-  return result;
-};
+import { createInAppNotificationInTransaction } from "../notifications/notification-service";
+import { addUtcCalendarMonths } from "../../domain/calendar";
+import { effectiveSchemeNumber } from "../database/scheme-policy";
 
 export function canStartPlanRegistration(
   membershipStatus: string,
@@ -20,9 +16,18 @@ export async function startPlanRegistration(memberId: string, actorId: string) {
   return runSerializablePaymentTransaction(async (tx) => {
     const member = await tx.member.findUnique({
       where: { id: memberId },
-      select: { status: true },
+      select: {
+        status: true,
+        userId: true,
+        externalId: true,
+        coordinatorProfile: { select: { id: true } },
+      },
     });
     if (!member) throw new Error("Member not found");
+    if (member.status === "CLOSED" || member.status === "DECEASED")
+      throw new Error("Only Foundation Admin can reopen a closed membership");
+    if (member.coordinatorProfile)
+      throw new Error("Coordinators are exempt from the ₹1,000 registration fee");
     const existing = await tx.communitySupportPlan.findFirst({ where: { memberId } });
     const pendingReopening = await tx.communitySupportPlan.findFirst({
       where: {
@@ -45,8 +50,10 @@ export async function startPlanRegistration(memberId: string, actorId: string) {
         memberId,
         planId: plan.id,
         purpose: "PLAN_REGISTRATION",
-        amountPaise: MONEY.planRegistration,
-        dueAt: new Date(Date.now() + 30 * 86400000),
+        amountPaise: await effectiveSchemeNumber(tx, "planRegistrationFeePaise"),
+        dueAt: new Date(
+          Date.now() + (await effectiveSchemeNumber(tx, "planPaymentDueDays")) * 86400000,
+        ),
       },
     });
     await tx.auditLog.create({
@@ -57,6 +64,16 @@ export async function startPlanRegistration(memberId: string, actorId: string) {
         entityId: plan.id,
       },
     });
+    await createInAppNotificationInTransaction(tx, {
+      userId: member.userId,
+      type: "PLAN_REGISTRATION",
+      title: "Community Support Plan registration started",
+      body: "Your ₹1,000 plan registration is awaiting payment. Please pay before the deadline shown in your member portal.",
+      template: "PLAN_REGISTRATION_STARTED",
+      relatedExternalId: plan.externalId,
+      payload: { planExternalId: plan.externalId, dueExternalId: due.externalId },
+      idempotencyKey: `plan-registration:${plan.id}`,
+    });
     return { plan, due };
   });
 }
@@ -66,12 +83,25 @@ export async function advancePlanAfterRegistrationPayment(
   tx: Prisma.TransactionClient,
   planId: string,
 ) {
-  const plan = await tx.communitySupportPlan.findUniqueOrThrow({ where: { id: planId } });
+  const plan = await tx.communitySupportPlan.findUniqueOrThrow({
+    where: { id: planId },
+    include: { member: { select: { userId: true } } },
+  });
   if (plan.status === "PAYMENT_PENDING") {
-    return tx.communitySupportPlan.update({
+    const updated = await tx.communitySupportPlan.update({
       where: { id: plan.id },
       data: { status: "PENDING_COORDINATOR_APPROVAL" },
     });
+    await createInAppNotificationInTransaction(tx, {
+      userId: plan.member.userId,
+      type: "PLAN_REGISTRATION",
+      title: "Plan payment received",
+      body: "Your ₹1,000 registration payment was received and is awaiting Coordinator approval.",
+      template: "PLAN_PAYMENT_RECEIVED",
+      relatedExternalId: updated.externalId,
+      idempotencyKey: `plan:${updated.id}:coordinator-approval`,
+    });
+    return updated;
   }
   return plan;
 }
@@ -80,13 +110,26 @@ export async function approvePlan(
   externalPlanId: string,
   actorId: string,
   stage: "COORDINATOR" | "ADMIN",
+  overrideReason?: string,
 ) {
   return runSerializablePaymentTransaction(async (tx) => {
     const plan = await tx.communitySupportPlan.findUnique({
       where: { externalId: externalPlanId },
-      include: { member: { select: { coordinatorId: true, status: true } } },
+      include: {
+        member: {
+          select: {
+            coordinatorId: true,
+            status: true,
+            userId: true,
+            membershipBillingAnchor: true,
+            joinedAt: true,
+          },
+        },
+      },
     });
     if (!plan) throw new Error("Plan not found");
+    if (["CLOSED", "DECEASED"].includes(plan.member.status))
+      throw new Error("Membership is not open for plan approval");
     if (stage === "COORDINATOR") {
       if (plan.status !== "PENDING_COORDINATOR_APPROVAL")
         throw new Error("Plan is not ready for Coordinator approval");
@@ -94,8 +137,15 @@ export async function approvePlan(
         where: { member: { userId: actorId }, isSuspended: false, status: "ACTIVE" },
         select: { id: true },
       });
-      if (!coordinator || coordinator.id !== plan.member.coordinatorId)
-        throw new Error("Coordinator is not assigned to this member");
+      if (!coordinator || coordinator.id !== plan.member.coordinatorId) {
+        const adminCoverage =
+          !plan.member.coordinatorId &&
+          overrideReason?.trim() &&
+          (await tx.userRole.count({
+            where: { userId: actorId, active: true, role: { code: "ADMIN" } },
+          }));
+        if (!adminCoverage) throw new Error("Coordinator is not assigned to this member");
+      }
       await tx.communitySupportPlan.update({
         where: { id: plan.id },
         data: { status: "PENDING_ADMIN_APPROVAL" },
@@ -104,17 +154,61 @@ export async function approvePlan(
       if (plan.status !== "PENDING_ADMIN_APPROVAL")
         throw new Error("Plan is not ready for Admin approval");
       const now = new Date();
+      if (
+        plan.isReopening &&
+        (await tx.due.count({
+          where: {
+            memberId: plan.memberId,
+            purpose: "MEMBERSHIP",
+            status: { in: ["PENDING", "OVERDUE", "EXPIRED"] },
+          },
+        }))
+      )
+        throw new Error("Pay the new ₹369 membership fee before reopening plan approval");
+      if (
+        plan.isReopening &&
+        !(await tx.due.findFirst({
+          where: {
+            memberId: plan.memberId,
+            purpose: "MEMBERSHIP",
+            status: "PAID",
+            createdAt: { gte: plan.member.membershipBillingAnchor ?? plan.member.joinedAt },
+            payments: {
+              some: {
+                status: "SUCCEEDED",
+                OR: [{ refund: null }, { refund: { status: { not: "SUCCEEDED" } } }],
+              },
+            },
+          },
+          select: { id: true },
+        }))
+      )
+        throw new Error("A successful current ₹369 membership payment is required for reopening");
       await tx.communitySupportPlan.update({
         where: { id: plan.id },
-        data: { status: "ACTIVE", activatedAt: now, waitingEndsAt: sixMonthsFrom(now) },
+        data: {
+          status: plan.member.status === "INACTIVE" && !plan.isReopening ? "SUSPENDED" : "ACTIVE",
+          activatedAt: now,
+          waitingEndsAt: addUtcCalendarMonths(
+            now,
+            await effectiveSchemeNumber(tx, "initialWaitingMonths", now),
+          ),
+        },
       });
       // CLOSED is deliberately different from ordinary INACTIVE reactivation:
       // it becomes ACTIVE only after a brand-new ₹1,000 registration has made
       // it through both approval stages.
-      if (plan.member.status === "CLOSED") {
+      if (plan.isReopening) {
         await tx.member.update({
           where: { id: plan.memberId },
           data: { status: "ACTIVE", closedAt: null },
+        });
+        await tx.membership.updateMany({
+          where: { memberId: plan.memberId, endedAt: null },
+          data: { endedAt: now },
+        });
+        await tx.membership.create({
+          data: { memberId: plan.memberId, status: "ACTIVE", startedAt: now },
         });
         await tx.auditLog.create({
           data: {
@@ -132,10 +226,26 @@ export async function approvePlan(
       data: {
         actorId,
         action: `PLAN_${stage}_APPROVED`,
+        reason: overrideReason?.trim(),
         entityType: "CommunitySupportPlan",
         entityId: plan.id,
         afterState: { status: updated.status },
       },
+    });
+    await createInAppNotificationInTransaction(tx, {
+      userId: plan.member.userId,
+      type: "PLAN_REGISTRATION",
+      title:
+        stage === "COORDINATOR"
+          ? "Coordinator approved your plan"
+          : "Community Support Plan is active",
+      body:
+        stage === "COORDINATOR"
+          ? "Your plan is now awaiting final Foundation Admin approval."
+          : "Your Community Support Plan is active. The initial six-month waiting period is now in effect.",
+      template: stage === "COORDINATOR" ? "PLAN_COORDINATOR_APPROVED" : "PLAN_ADMIN_APPROVED",
+      relatedExternalId: updated.externalId,
+      idempotencyKey: `plan:${updated.id}:${stage.toLowerCase()}-approved`,
     });
     return updated;
   });
@@ -150,9 +260,23 @@ export async function extendPlanDue(
   if (!reason.trim() || dueAt <= new Date())
     throw new Error("A reason and future expiry are required");
   return runSerializablePaymentTransaction(async (tx) => {
-    const due = await tx.due.findUnique({ where: { externalId: externalDueId } });
-    if (!due || due.purpose !== "PLAN_REGISTRATION" || due.status === "PAID")
+    const due = await tx.due.findUnique({
+      where: { externalId: externalDueId },
+      include: {
+        member: { select: { userId: true, status: true } },
+        plan: { select: { status: true } },
+      },
+    });
+    if (
+      !due ||
+      due.purpose !== "PLAN_REGISTRATION" ||
+      !["PENDING", "OVERDUE", "EXPIRED"].includes(due.status) ||
+      due.plan?.status !== "PAYMENT_PENDING" ||
+      ["CLOSED", "DECEASED"].includes(due.member.status)
+    )
       throw new Error("Plan registration due not found or already settled");
+    if (dueAt <= due.dueAt)
+      throw new Error("The extended deadline must be later than the existing deadline");
     // An extension is the explicit Admin authorization that makes an expired
     // ₹1,000 obligation payable again; it also starts a fresh reminder cadence.
     const updated = await tx.due.update({
@@ -169,6 +293,16 @@ export async function extendPlanDue(
         beforeState: { dueAt: due.dueAt.toISOString(), status: due.status },
         afterState: { dueAt: updated.dueAt.toISOString(), status: updated.status },
       },
+    });
+    await createInAppNotificationInTransaction(tx, {
+      userId: due.member.userId,
+      type: "PLAN_EXPIRY",
+      title: "Plan payment deadline extended",
+      body: "A Foundation Admin extended your ₹1,000 plan registration payment deadline. Review the updated deadline in your member portal.",
+      template: "PLAN_DUE_EXTENDED",
+      relatedExternalId: updated.externalId,
+      payload: { dueExternalId: updated.externalId },
+      idempotencyKey: `plan-due-extension:${updated.id}:${updated.dueAt.toISOString()}`,
     });
     return updated;
   });

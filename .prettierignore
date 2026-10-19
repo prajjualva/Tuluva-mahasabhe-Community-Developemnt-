@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.next-validation/
+coverage/
+uploads/
+uploads-ci/
+*.log
+*.tsbuildinfo
+prisma/generated/

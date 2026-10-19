@@ -44,6 +44,7 @@ describe("persistent contribution generation", () => {
 
   it("rejects a publication timestamp before the event was created", async () => {
     const tx = {
+      schemeSettingVersion: { findFirst: async () => null },
       contributionEvent: {
         findUnique: async () => ({
           id: uuid("6"),
@@ -72,15 +73,31 @@ describe("persistent contribution generation", () => {
       createdAt: eventCreatedAt,
     };
     const members = [
-      { id: uuid("3"), joinedAt: new Date("2026-01-01"), status: "ACTIVE" },
-      { id: uuid("4"), joinedAt: new Date("2026-01-01"), status: "INACTIVE" },
-      { id: uuid("5"), joinedAt: new Date("2026-01-11"), status: "ACTIVE" },
+      {
+        id: uuid("3"),
+        userId: uuid("103"),
+        joinedAt: new Date("2026-01-01"),
+        status: "ACTIVE",
+      },
+      {
+        id: uuid("4"),
+        userId: uuid("104"),
+        joinedAt: new Date("2026-01-01"),
+        status: "INACTIVE",
+      },
+      {
+        id: uuid("5"),
+        userId: uuid("105"),
+        joinedAt: new Date("2026-01-11"),
+        status: "ACTIVE",
+      },
     ];
     const dues: Array<{ id: string; externalId: string; memberId: string }> = [];
     const contributions: Array<{ eventId: string; memberId: string; dueId: string }> = [];
     const audits: Array<{ action: string }> = [];
-    let sequence = 10;
+    const notifications: Array<{ data: { userId: string } }> = [];
     const tx = {
+      schemeSettingVersion: { findFirst: async () => null },
       contributionEvent: {
         findUnique: async () => event,
         update: async ({ data }: { data: { publishedAt: Date } }) => {
@@ -100,37 +117,44 @@ describe("persistent contribution generation", () => {
           ),
       },
       due: {
-        create: async ({ data }: { data: { memberId: string } }) => {
-          const due = {
-            id: uuid(String(sequence++)),
-            externalId: uuid(String(sequence++)),
-            memberId: data.memberId,
-          };
-          dues.push(due);
-          return due;
+        createMany: async ({
+          data,
+        }: {
+          data: Array<{ id: string; externalId: string; memberId: string }>;
+        }) => {
+          dues.push(...data);
+          return { count: data.length };
         },
       },
       contribution: {
-        create: async ({
+        createMany: async ({
           data,
         }: {
-          data: { eventId: string; memberId: string; dueId: string };
+          data: Array<{ eventId: string; memberId: string; dueId: string }>;
         }) => {
-          if (
-            contributions.some(
-              (contribution) =>
-                contribution.eventId === data.eventId && contribution.memberId === data.memberId,
+          for (const item of data) {
+            if (
+              contributions.some(
+                (contribution) =>
+                  contribution.eventId === item.eventId && contribution.memberId === item.memberId,
+              )
             )
-          )
-            throw new Error("duplicate contribution");
-          contributions.push(data);
-          return data;
+              throw new Error("duplicate contribution");
+            contributions.push(item);
+          }
+          return { count: data.length };
         },
       },
       auditLog: {
         create: async ({ data }: { data: { action: string } }) => {
           audits.push({ action: data.action });
           return data;
+        },
+      },
+      notification: {
+        createMany: async ({ data }: { data: Array<{ userId: string }> }) => {
+          notifications.push(...data.map((item) => ({ data: item })));
+          return { count: data.length };
         },
       },
     };
@@ -150,6 +174,10 @@ describe("persistent contribution generation", () => {
     expect(audits.map((audit) => audit.action)).toEqual([
       "CONTRIBUTION_EVENT_PUBLISHED",
       "CONTRIBUTION_DUES_GENERATED",
+    ]);
+    expect(notifications.map((notification) => notification.data.userId)).toEqual([
+      members[0]!.userId,
+      members[1]!.userId,
     ]);
   });
 });

@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { refreshMembershipFinancialStatus } from "../membership/membership-lifecycle-service";
 import { prisma } from "../database/prisma";
 import { advancePlanAfterRegistrationPayment } from "../plans/plan-service";
+import { createInAppNotificationInTransaction } from "../notifications/notification-service";
+import { flagUnappliedFunds } from "./unapplied-payment-service";
 import {
   assertDuePayable,
   assertDueSettlementAllowed,
@@ -110,15 +113,28 @@ export async function settlePayment(
   return runSerializablePaymentTransaction(async (tx) => {
     const existing = await tx.payment.findUnique({
       where: { id: paymentId },
-      include: { receipt: true, due: true },
+      include: { receipt: true, due: true, member: { select: { userId: true } } },
     });
     if (!existing) throw new Error("Payment not found");
-    if (existing.status === "SUCCEEDED")
+    if (existing.status === "SUCCEEDED") {
+      if (existing.providerReference !== providerReference)
+        throw new Error("Payment capture reference does not match the settled payment");
       return { payment: existing, receipt: existing.receipt, alreadySettled: true };
+    }
     if (existing.status !== "PENDING") throw new Error("Payment is not pending");
 
+    let appliedToDue = true;
     if (existing.due) {
-      assertDueSettlementAllowed(existing.due, settledAt);
+      try {
+        assertDueSettlementAllowed(existing.due, settledAt);
+      } catch (error) {
+        if (existing.method !== "ONLINE") throw error;
+        // A signed capture is real money even after waiver, death, closure or
+        // expiry. Record it, but never resurrect the obligation or entitlement.
+        appliedToDue = false;
+      }
+    }
+    if (existing.due && appliedToDue) {
       const claimed = await tx.due.updateMany({
         where: {
           id: existing.due.id,
@@ -132,9 +148,11 @@ export async function settlePayment(
       where: { id: paymentId },
       data: { status: "SUCCEEDED", providerReference },
     });
-    if (existing.due) {
+    if (existing.due && appliedToDue) {
       if (existing.due.purpose === "PLAN_REGISTRATION" && existing.due.planId)
         await advancePlanAfterRegistrationPayment(tx, existing.due.planId);
+      if (existing.due.purpose === "MEMBERSHIP" && existing.memberId)
+        await refreshMembershipFinancialStatus(tx, existing.memberId);
     }
     const receipt = await tx.receipt.create({
       data: {
@@ -146,8 +164,9 @@ export async function settlePayment(
       data: {
         direction: "CREDIT",
         amountPaise: payment.amountPaise,
-        purpose: existing.due?.purpose ?? "PAYMENT",
+        purpose: appliedToDue ? (existing.due?.purpose ?? "PAYMENT") : "UNAPPLIED_PAYMENT",
         relatedExternalId: payment.externalId,
+        reference: providerReference,
         authorizedActorId: actorId,
         status: "SUCCEEDED",
       },
@@ -161,6 +180,34 @@ export async function settlePayment(
         entityId: payment.id,
       },
     });
+    if (!appliedToDue && existing.due) await flagUnappliedFunds(tx, payment, existing.due, actorId);
+    if (existing.member) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: existing.member.userId,
+        type: "PAYMENT_SUCCEEDED",
+        title: "Payment received",
+        body: appliedToDue
+          ? `Your Foundation payment has been received successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`
+          : `Your online payment was received, but could not be applied to the obligation. Admin has been notified for refund review. Receipt ${receipt.receiptNumber} records the funds received; no membership or plan was activated.`,
+        template: "PAYMENT_SETTLED",
+        relatedExternalId: payment.externalId,
+        payload: {
+          receiptNumber: receipt.receiptNumber,
+          duePurpose: existing.due?.purpose ?? "PAYMENT",
+        },
+        idempotencyKey: `payment:${payment.id}:succeeded`,
+      });
+      await createInAppNotificationInTransaction(tx, {
+        userId: existing.member.userId,
+        type: "RECEIPT_GENERATED",
+        title: "Official receipt generated",
+        body: `Official receipt ${receipt.receiptNumber} is ready for your Foundation payment.`,
+        template: "RECEIPT_GENERATED",
+        relatedExternalId: payment.externalId,
+        payload: { receiptNumber: receipt.receiptNumber },
+        idempotencyKey: `receipt:${receipt.id}:generated`,
+      });
+    }
     return { payment, receipt, alreadySettled: false };
   });
 }
@@ -169,7 +216,7 @@ export async function failPayment(paymentId: string, actorId?: string) {
   return runSerializablePaymentTransaction(async (tx) => {
     const payment = await tx.payment.findUniqueOrThrow({
       where: { id: paymentId },
-      include: { due: true },
+      include: { due: true, member: { select: { userId: true } } },
     });
     if (payment.status === "FAILED") return payment;
     if (payment.status !== "PENDING") throw new Error("Payment outcome is immutable");
@@ -258,6 +305,18 @@ export async function failPayment(paymentId: string, actorId?: string) {
         entityId: payment.id,
       },
     });
+    if (payment.member) {
+      await createInAppNotificationInTransaction(tx, {
+        userId: payment.member.userId,
+        type: "PAYMENT_FAILED",
+        title: "Payment was not completed",
+        body: "Your Foundation payment was not completed. No successful payment has been recorded; you can try again from the member portal.",
+        template: "PAYMENT_FAILED",
+        relatedExternalId: payment.externalId,
+        payload: { duePurpose: payment.due?.purpose ?? "PAYMENT" },
+        idempotencyKey: `payment:${payment.id}:failed`,
+      });
+    }
     return failed;
   });
 }

@@ -15,6 +15,7 @@ const rupees = (paise: number) =>
 export function CoordinatorCashCollection() {
   const [members, setMembers] = useState<Member[]>([]);
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   const load = async () => {
     const response = await fetch("/api/coordinator/members");
     if (response.ok) setMembers(await response.json());
@@ -24,22 +25,31 @@ export function CoordinatorCashCollection() {
     void load();
   }, []);
   const recordCollection = async (member: Member, due: Due, method: "CASH" | "MANUAL") => {
-    const response = await fetch("/api/coordinator/cash", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        memberExternalId: member.externalId,
-        dueExternalId: due.externalId,
-        idempotencyKey: crypto.randomUUID(),
-        method,
-      }),
-    });
-    setMessage(
-      response.ok
-        ? `${method === "CASH" ? "Cash collection" : "Manual payment"} recorded. It now awaits Administrator verification.`
-        : "Could not record this Coordinator payment.",
-    );
-    await load();
+    setBusy(true);
+    try {
+      const response = await fetch("/api/coordinator/cash", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          memberExternalId: member.externalId,
+          dueExternalId: due.externalId,
+          idempotencyKey: crypto.randomUUID(),
+          method,
+        }),
+      });
+      const result = await response.json();
+      setMessage(
+        response.ok
+          ? `${method === "CASH" ? "Cash collection" : "Manual payment"} recorded. It now awaits Administrator verification.`
+          : (result.error ?? "Could not record this Coordinator payment."),
+      );
+      if (response.ok) window.dispatchEvent(new Event("cash-collection-recorded"));
+      await load();
+    } catch {
+      setMessage("Could not reach the server. Refresh before trying again.");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <article>
@@ -54,10 +64,10 @@ export function CoordinatorCashCollection() {
               member.dues.map((due) => (
                 <div key={due.externalId}>
                   {due.purpose} · {rupees(due.amountPaise)}{" "}
-                  <button onClick={() => recordCollection(member, due, "CASH")}>
+                  <button disabled={busy} onClick={() => recordCollection(member, due, "CASH")}>
                     Record cash received
                   </button>
-                  <button onClick={() => recordCollection(member, due, "MANUAL")}>
+                  <button disabled={busy} onClick={() => recordCollection(member, due, "MANUAL")}>
                     Record manual payment
                   </button>
                 </div>
