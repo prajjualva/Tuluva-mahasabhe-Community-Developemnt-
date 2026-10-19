@@ -14,6 +14,7 @@ import { NomineeVerificationQueue } from "../components/nominee-verification";
 import { requirePagePermission } from "../../server/http/page-authorize";
 import { DueWaivers } from "../components/due-waivers";
 import { OperationsShell } from "../components/operations-shell";
+import { AdminUserManagement } from "./user-management";
 export default async function AdminDashboard() {
   await requirePagePermission("admin:*", "/admin");
   return (
@@ -39,6 +40,13 @@ export default async function AdminDashboard() {
           label: "Coordinators",
           description: "Manage Coordinator appointments, assignments, suspension and restoration.",
           content: <AdminCoordinatorManagement />,
+        },
+        {
+          id: "access",
+          label: "Account access",
+          description:
+            "Review all identities, including Admin accounts without Member profiles, and manage audited role assignments.",
+          content: <AdminUserManagement />,
         },
         {
           id: "plans",

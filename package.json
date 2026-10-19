@@ -9,6 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "build:verify": "node scripts/verify-production-build.mjs",
+    "demo:check": "node scripts/check-demo-routes.mjs",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",

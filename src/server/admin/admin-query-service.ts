@@ -19,10 +19,20 @@ export async function adminDashboardSnapshot() {
     ledger,
     auditActivity,
     news,
+    waivers,
+    adjustments,
+    temporarilyManagedMembers,
   ] = await Promise.all([
     prisma.member.groupBy({ by: ["status"], _count: true }),
     prisma.coordinator.groupBy({ by: ["status"], _count: true }),
-    prisma.communitySupportPlan.count({ where: { status: "PENDING_ADMIN_APPROVAL" } }),
+    prisma.communitySupportPlan.count({
+      where: {
+        OR: [
+          { status: "PENDING_ADMIN_APPROVAL" },
+          { status: "PENDING_COORDINATOR_APPROVAL", member: { coordinatorId: null } },
+        ],
+      },
+    }),
     prisma.nominee.count({ where: { status: "PENDING_VERIFICATION" } }),
     prisma.deathCase.count({
       where: { status: { in: ["REPORTED", "COORDINATOR_CONFIRMED", "ADMIN_VERIFICATION"] } },
@@ -41,6 +51,11 @@ export async function adminDashboardSnapshot() {
     prisma.foundationLedger.count(),
     prisma.auditLog.count(),
     prisma.communityNews.count({ where: { status: "PENDING_APPROVAL" } }),
+    prisma.dueWaiverRequest.count({ where: { status: "PENDING" } }),
+    prisma.ledgerAdjustment.count({ where: { status: "PENDING" } }),
+    prisma.member.count({
+      where: { coordinatorId: null, status: { notIn: ["CLOSED", "DECEASED"] } },
+    }),
   ]);
   return {
     generatedAt: new Date(),
@@ -61,6 +76,19 @@ export async function adminDashboardSnapshot() {
       ledgerEntries: ledger,
       auditActivity,
       newsApprovals: news,
+      waiverApprovals: waivers,
+      operationalAdjustments: adjustments,
+      temporarilyManagedMembers,
+      pendingAdminTasks:
+        plans +
+        nominees +
+        deathReports +
+        cashCollections +
+        discrepancies +
+        supportPayments +
+        news +
+        waivers +
+        adjustments,
     },
   };
 }
@@ -109,6 +137,46 @@ export async function searchAdminMembers(input: unknown) {
     }),
   ]);
   return { total, page: query.page, members };
+}
+
+export async function searchAdminUsers(input: unknown) {
+  const query = z
+    .object({
+      search: z.string().trim().max(160).default(""),
+      page: z.coerce.number().int().min(1).max(100000).default(1),
+    })
+    .strict()
+    .parse(input);
+  const where: Prisma.UserWhereInput = query.search
+    ? {
+        OR: [
+          { email: { contains: query.search, mode: "insensitive" } },
+          { mobile: { contains: query.search } },
+          { member: { fullName: { contains: query.search, mode: "insensitive" } } },
+          ...(z.string().uuid().safeParse(query.search).success
+            ? [{ externalId: query.search }]
+            : []),
+        ],
+      }
+    : {};
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * 30,
+      take: 30,
+      select: {
+        externalId: true,
+        email: true,
+        mobile: true,
+        status: true,
+        member: { select: { externalId: true, fullName: true, status: true } },
+        roles: { select: { active: true, role: { select: { code: true, name: true } } } },
+      },
+    }),
+  ]);
+  return { total, page: query.page, users };
 }
 
 export async function adminMemberDetail(externalId: string, actorId: string) {
@@ -215,11 +283,24 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
           relationship: true,
           status: true,
           isCurrent: true,
-          documents: { select: { contentType: true } },
+          documents: {
+            select: {
+              externalId: true,
+              originalFilename: true,
+              contentType: true,
+              uploadedAt: true,
+            },
+          },
         },
       },
       transfers: {
-        select: { effectiveAt: true, reason: true },
+        select: {
+          effectiveAt: true,
+          reason: true,
+          fromCoordinatorId: true,
+          toCoordinatorId: true,
+          actorId: true,
+        },
         orderBy: { effectiveAt: "desc" },
         take: 100,
       },
@@ -253,5 +334,55 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
   });
   const { id: internalId, ...safe } = member;
   void internalId;
-  return safe;
+  const [historyCoordinators, historyActors] = await Promise.all([
+    prisma.coordinator.findMany({
+      where: {
+        id: {
+          in: member.transfers.flatMap((row) =>
+            [row.fromCoordinatorId, row.toCoordinatorId].filter((id): id is string => Boolean(id)),
+          ),
+        },
+      },
+      select: {
+        id: true,
+        externalId: true,
+        referralCode: true,
+        member: { select: { fullName: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: { id: { in: member.transfers.flatMap((row) => (row.actorId ? [row.actorId] : [])) } },
+      select: { id: true, externalId: true, email: true, member: { select: { fullName: true } } },
+    }),
+  ]);
+  const coordinatorReference = (id: string | null) => {
+    const value = historyCoordinators.find((row) => row.id === id);
+    return value
+      ? {
+          externalId: value.externalId,
+          fullName: value.member.fullName,
+          referralCode: value.referralCode,
+        }
+      : null;
+  };
+  return {
+    ...safe,
+    transfers: member.transfers.map(
+      ({ effectiveAt, reason, fromCoordinatorId, toCoordinatorId, actorId }) => {
+        const actor = historyActors.find((row) => row.id === actorId);
+        return {
+          effectiveAt,
+          reason,
+          fromCoordinator: coordinatorReference(fromCoordinatorId),
+          toCoordinator: coordinatorReference(toCoordinatorId),
+          actor: actor
+            ? {
+                externalId: actor.externalId,
+                name: actor.member?.fullName ?? actor.email ?? "Foundation operator",
+              }
+            : null,
+        };
+      },
+    ),
+  };
 }

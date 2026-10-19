@@ -52,9 +52,20 @@ type Detail = Member & {
     relationship: string;
     status: string;
     isCurrent: boolean;
-    documents: { contentType: string }[];
+    documents: {
+      externalId: string;
+      originalFilename: string | null;
+      contentType: string;
+      uploadedAt: string;
+    }[];
   }[];
-  transfers: { effectiveAt: string; reason: string }[];
+  transfers: {
+    effectiveAt: string;
+    reason: string;
+    fromCoordinator: { fullName: string; externalId: string } | null;
+    toCoordinator: { fullName: string; externalId: string } | null;
+    actor: { name: string; externalId: string } | null;
+  }[];
   deathCases: {
     externalId: string;
     status: string;
@@ -272,7 +283,16 @@ export function AdminMemberManagement() {
                 {payment.externalId} · {money(payment.amountPaise)} · {payment.method} ·{" "}
                 {payment.status}
                 <br />
-                Receipt: {payment.receipt?.receiptNumber ?? "Not issued"}
+                Receipt:{" "}
+                {payment.receipt ? (
+                  <a
+                    href={`/api/admin/receipts/${encodeURIComponent(payment.receipt.receiptNumber)}/download`}
+                  >
+                    {payment.receipt.receiptNumber} — download
+                  </a>
+                ) : (
+                  "Not issued"
+                )}
               </p>
             ))}
           </details>
@@ -289,11 +309,23 @@ export function AdminMemberManagement() {
           <details>
             <summary>Nominees and documents</summary>
             {detail.nominees.map((nominee) => (
-              <p key={nominee.externalId}>
-                {nominee.fullName} · {nominee.relationship} · {nominee.kind} · {nominee.status} ·{" "}
-                {nominee.isCurrent ? "Current" : "Pending / historical"} ·{" "}
-                {nominee.documents.length} documents
-              </p>
+              <section key={nominee.externalId}>
+                <p>
+                  {nominee.fullName} · {nominee.relationship} · {nominee.kind} · {nominee.status} ·{" "}
+                  {nominee.isCurrent ? "Current" : "Pending / historical"} ·{" "}
+                  {nominee.documents.length} documents
+                </p>
+                {nominee.documents.map((document) => (
+                  <p key={document.externalId}>
+                    <a
+                      href={`/api/admin/nominees/${nominee.externalId}/documents/${document.externalId}/download`}
+                    >
+                      {document.originalFilename ?? "Restricted nominee evidence"}
+                    </a>{" "}
+                    · {new Date(document.uploadedAt).toLocaleDateString("en-IN")}
+                  </p>
+                ))}
+              </section>
             ))}
             {detail.deathCases.map((deathCase) => (
               <section key={deathCase.externalId}>
@@ -318,6 +350,11 @@ export function AdminMemberManagement() {
             {detail.transfers.map((row, index) => (
               <p key={index}>
                 {new Date(row.effectiveAt).toLocaleString("en-IN")} · {row.reason}
+                <br />
+                {row.fromCoordinator?.fullName ?? "Foundation Admin"} →{" "}
+                {row.toCoordinator?.fullName ?? "Foundation Admin"}
+                <br />
+                Recorded by: {row.actor ? `${row.actor.name} (${row.actor.externalId})` : "System"}
               </p>
             ))}
             <form

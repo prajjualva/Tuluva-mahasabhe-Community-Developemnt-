@@ -8,6 +8,8 @@ type Overview = {
   tasks: Record<string, number>;
 };
 const tasks: [string, string, string][] = [
+  ["pendingAdminTasks", "Pending queue items", "overview"],
+  ["temporarilyManagedMembers", "Admin-managed members", "members"],
   ["planApprovals", "Plan approvals", "plans"],
   ["nomineeVerification", "Nominee verification", "nominees"],
   ["deathReports", "Death reports", "death-reports"],
@@ -21,6 +23,8 @@ const tasks: [string, string, string][] = [
   ["ledgerEntries", "Ledger entries", "ledger"],
   ["auditActivity", "Audit records", "audit"],
   ["newsApprovals", "News approvals", "news"],
+  ["waiverApprovals", "Waiver approvals", "waivers"],
+  ["operationalAdjustments", "Operational adjustments", "ledger"],
 ];
 export function AdminOverview() {
   const [data, setData] = useState<Overview | null>(null);

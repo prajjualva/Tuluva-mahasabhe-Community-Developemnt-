@@ -5,7 +5,11 @@ import {
   createCoordinatorProfile,
   changeUserRole,
 } from "../src/server/admin/admin-command-service";
-import { adminMemberDetail, searchAdminMembers } from "../src/server/admin/admin-query-service";
+import {
+  adminMemberDetail,
+  searchAdminMembers,
+  searchAdminUsers,
+} from "../src/server/admin/admin-query-service";
 import {
   listMemberNominees,
   submitNominee,
@@ -154,8 +158,27 @@ const evidence = () =>
     );
     expect(JSON.stringify(current)).not.toContain(command.bankDetails.accountNumber);
     const profile = await adminMemberDetail(members[0].externalId, admin.id);
+    const accounts = await searchAdminUsers({ search: marker });
+    expect(accounts.users.find((user) => user.externalId === admin.externalId)?.member).toBeNull();
+    expect(
+      accounts.users
+        .find((user) => user.externalId === admin.externalId)
+        ?.roles.some((row) => row.role.code === "ADMIN" && row.active),
+    ).toBe(true);
+    expect(JSON.stringify(accounts)).not.toMatch(
+      /passwordHash|pendingEmail|pendingMobile|bankEncrypted/,
+    );
+    expect(
+      profile.transfers.some((row) => row.toCoordinator?.externalId === coordinator.externalId),
+    ).toBe(true);
     expect(JSON.stringify(profile)).not.toContain(command.bankDetails.accountNumber);
     expect(profile.nominees).toHaveLength(2);
+    expect(
+      profile.nominees
+        .flatMap((nominee) => nominee.documents)
+        .every((document) => Boolean(document.externalId) && Boolean(document.originalFilename)),
+    ).toBe(true);
+    expect(JSON.stringify(profile.nominees)).not.toMatch(/evidenceBytes|storageKey|bankEncrypted/);
     expect(
       (await searchAdminMembers({ search: marker })).members.map((member) => member.externalId),
     ).toContain(members[0].externalId);

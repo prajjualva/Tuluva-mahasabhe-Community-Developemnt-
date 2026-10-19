@@ -52,4 +52,6 @@ Do not initiate a real payout simply to demonstrate the UI. Use the automated in
 
 Use `npm run build:verify` while the demo is running; it performs a real production build in `.next-validation` without overwriting the demo's development output. Normal deployment still uses `npm run build` and `npm start`.
 
+With the local server running and development identities present, `npm run demo:check` signs into isolated test sessions for each role, reads the working APIs, verifies Admin-only denials and checks for restricted-field exposure. It submits no financial commands and invalidates only its own test sessions. It refuses non-loopback URLs and must not be run against production.
+
 Public launch separately requires production credentials, infrastructure/storage configuration, backups, job scheduling, operational acceptance and an independent security review.

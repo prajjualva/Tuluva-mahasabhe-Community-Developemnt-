@@ -34,6 +34,8 @@ See [the production-pilot checklist](docs/PRODUCTION_PILOT.md) before deployment
 
 For the local demonstration, see [the role-by-role walkthrough](docs/DEMO_WALKTHROUGH.md). Use `npm run build:verify` to validate a production build without overwriting the running demo's development output.
 
+The [Phase 10 and 11 acceptance checklist](docs/PHASE_10_11_ACCEPTANCE.md) maps cash, reconciliation, ledger, Admin and audit requirements to the implemented workflows and separates external activation requirements.
+
 ## Security and financial design
 
 Amounts are integer paise. The server calculates payable amounts from persisted dues/versioned settings. Multi-record financial changes use serializable Prisma transactions with bounded concurrency retries, payment idempotency and provider-event uniqueness. Settled records are retained; refunds and wallet compensation append history. Audit writes have request correlation IDs and application-level mutation protection.

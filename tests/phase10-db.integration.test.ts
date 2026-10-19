@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/server/database/prisma";
+import { downloadAdministrativeReceipt } from "../src/server/admin/admin-receipt-service";
 import {
   collectCashForDue,
   verifyCashCollection,
@@ -38,6 +39,8 @@ const evidence = () =>
       userIds.push(user.id);
     }
     const [admin, owner, outsider, payer] = users;
+    const adminRole = await prisma.role.findUniqueOrThrow({ where: { code: "ADMIN" } });
+    await prisma.userRole.create({ data: { userId: admin.id, roleId: adminRole.id } });
     const members = [];
     for (const user of [owner, outsider, payer]) {
       const member = await prisma.member.create({
@@ -93,6 +96,17 @@ const evidence = () =>
       where: { paymentId: payments[0].id },
     });
     expect(receipt.receiptNumber).toMatch(/^CASH-\d{4}-\d{6,}$/);
+    await expect(downloadAdministrativeReceipt(owner.id, receipt.receiptNumber)).rejects.toThrow(
+      "Forbidden",
+    );
+    const pendingReceipt = await downloadAdministrativeReceipt(admin.id, receipt.receiptNumber);
+    expect(pendingReceipt.html).toContain("PENDING");
+    expect(pendingReceipt.html).not.toContain(payments[0].id);
+    expect(
+      await prisma.auditLog.count({
+        where: { actorId: admin.id, action: "ADMIN_RECEIPT_DOWNLOADED", entityId: payments[0].id },
+      }),
+    ).toBe(1);
     await expect(verifyCashCollection(collections[0].externalId, admin.id, true)).rejects.toThrow(
       "remittance evidence",
     );
@@ -145,6 +159,14 @@ const evidence = () =>
       where: { cashCollectionId: collections[1].id },
     });
     expect(discrepancy.amountPaise).toBe(36900);
+    await expect(
+      verifyCashCollection(
+        collections[1].externalId,
+        admin.id,
+        false,
+        "Attempted rejection of outstanding cash",
+      ),
+    ).rejects.toThrow("must be reconciled");
     expect(
       discrepancy.deadlineAt.getTime() - discrepancy.createdAt.getTime(),
     ).toBeGreaterThanOrEqual(30 * 86400000 - 1000);
@@ -335,5 +357,6 @@ afterAll(async () => {
   });
   await prisma.coordinator.deleteMany({ where: { id: { in: coordinatorIds } } });
   await prisma.member.deleteMany({ where: { id: { in: memberIds } } });
+  await prisma.userRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 }, 90_000);
