@@ -5,7 +5,7 @@ Do not use the development seed command in production.
 
 ## Required before launch
 
-The main-app deployment configuration, private S3 storage setup, authenticated Vercel cron jobs and fail-closed deployment checks are documented in [MAIN_APP_DEPLOYMENT.md](MAIN_APP_DEPLOYMENT.md). Use a separate project/database from the development app and public stakeholder demo.
+The main-app deployment configuration, private S3 storage setup, authenticated Vercel cron jobs and fail-closed deployment checks are documented in [MAIN_APP_DEPLOYMENT.md](MAIN_APP_DEPLOYMENT.md). Use a separate production database from development. The owner has requested replacing the existing public demo in the same Vercel project/address, retaining its previous deployment for rollback.
 
 1. Set a production `DATABASE_URL` with a least-privilege database user.
 2. Set `AUTH_SECRET` to a new random secret of at least 32 characters.
