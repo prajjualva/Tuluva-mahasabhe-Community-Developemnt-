@@ -32,6 +32,7 @@ export function MemberNavigation() {
         {open ? "Close menu" : "Open menu"}
       </button>
       <nav id="member-navigation" aria-label="Member navigation" data-open={open}>
+        {process.env.NODE_ENV !== "production" && <Link href="/demo">Stakeholder demo ↗</Link>}
         {links.map(([label, href]) => (
           <Link
             key={href}

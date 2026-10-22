@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  assertPrivateObjectKey,
+  putPrivateObject,
+  getPrivateObject,
+  deletePrivateObject,
+} from "./private-object-storage";
 
 export const MAX_DEATH_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
@@ -59,6 +65,8 @@ export function validateDeathEvidenceFile(file: DeathEvidenceFile) {
 }
 
 function localStorageRoot() {
+  if (process.env.VERCEL === "1")
+    throw new Error("Private persistent document storage is required on serverless hosting");
   if ((process.env.UPLOAD_STORAGE ?? "local").toLowerCase() !== "local")
     throw new Error("The configured document storage provider is not available");
   const configured = process.env.UPLOAD_LOCAL_PATH;
@@ -67,6 +75,7 @@ function localStorageRoot() {
 }
 
 function filePathForKey(storageKey: string) {
+  assertPrivateObjectKey(storageKey);
   const root = localStorageRoot();
   const target = path.resolve(root, storageKey);
   if (!target.startsWith(`${root}${path.sep}`)) throw new Error("Invalid document storage key");
@@ -74,9 +83,8 @@ function filePathForKey(storageKey: string) {
 }
 
 /**
- * Local storage is intentionally behind this small boundary. Production can
- * replace this module with an object-storage adapter without changing report,
- * document authorization, or metadata persistence.
+ * The provider is server-only. Downloads still require the existing case/document
+ * authorization services; a storage key is never a public or presigned URL.
  */
 export async function storeDeathEvidence(
   caseExternalId: string,
@@ -88,9 +96,13 @@ export async function storeDeathEvidence(
   assertMagicBytes(file.type, bytes);
 
   const storageKey = path.posix.join("death-evidence", caseExternalId, randomUUID());
-  const target = filePathForKey(storageKey);
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+  if (process.env.UPLOAD_STORAGE?.toLowerCase() === "s3") {
+    await putPrivateObject(storageKey, bytes, file.type);
+  } else {
+    const target = filePathForKey(storageKey);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, bytes, { flag: "wx", mode: 0o600 });
+  }
   return {
     storageKey,
     contentType: file.type,
@@ -100,9 +112,11 @@ export async function storeDeathEvidence(
 }
 
 export async function readDeathEvidence(storageKey: string) {
+  if (process.env.UPLOAD_STORAGE?.toLowerCase() === "s3") return getPrivateObject(storageKey);
   return readFile(filePathForKey(storageKey));
 }
 
 export async function removeDeathEvidence(storageKey: string) {
+  if (process.env.UPLOAD_STORAGE?.toLowerCase() === "s3") return deletePrivateObject(storageKey);
   await rm(filePathForKey(storageKey), { force: true });
 }

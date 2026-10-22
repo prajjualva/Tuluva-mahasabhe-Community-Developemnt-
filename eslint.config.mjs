@@ -10,6 +10,7 @@ export default [
     ignores: [
       ".next/**",
       ".next-validation/**",
+      ".stakeholder-export/**",
       "next-env.d.ts",
       "node_modules/**",
       "coverage/**",

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { isAuthorizedInternalJob } from "../../../../../server/security/internal-job-auth";
 import { prisma } from "../../../../../server/database/prisma";
 import {
   duesNeedingReminder,
@@ -8,14 +8,7 @@ import {
 import { createInAppNotificationInTransaction } from "../../../../../server/notifications/notification-service";
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.INTERNAL_JOB_SECRET;
-  const supplied = request.headers.get("x-internal-job-secret");
-  if (
-    !secret ||
-    !supplied ||
-    secret.length !== supplied.length ||
-    !timingSafeEqual(Buffer.from(secret), Buffer.from(supplied))
-  )
+  if (!isAuthorizedInternalJob(request))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const candidates = await prisma.due.findMany({
     where: {
@@ -117,3 +110,7 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ queued, expired: expiredCount });
 }
+
+export const GET = POST;
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";

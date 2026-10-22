@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { DeathCaseStatus, DeathEligibilityStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { contributionProgress } from "../../domain/contribution-progress";
 import { generateContributionDuesInTransaction } from "../contributions/contribution-generation-service";
 import { prisma } from "../database/prisma";
 import {
@@ -1196,6 +1197,7 @@ const publicEventSelect = {
   status: true,
   publishedAt: true,
   publicDetails: true,
+  contributions: { select: { dueId: true } },
   deathCase: {
     select: {
       placeOfDeath: true,
@@ -1224,7 +1226,7 @@ export async function listPublishedDeathSupportEvents() {
     orderBy: { publishedAt: "desc" },
     select: publicEventSelect,
   });
-  return events.map(toPublicEvent);
+  return attachPublicContributionProgress(events);
 }
 
 export async function getPublishedDeathSupportEvent(eventExternalId: string) {
@@ -1233,7 +1235,28 @@ export async function getPublishedDeathSupportEvent(eventExternalId: string) {
     select: publicEventSelect,
   });
   if (!event) throw new Error("Published Death Support Event not found");
-  return toPublicEvent(event);
+  return (await attachPublicContributionProgress([event]))[0];
+}
+
+async function attachPublicContributionProgress(
+  events: Prisma.ContributionEventGetPayload<{ select: typeof publicEventSelect }>[],
+) {
+  const dueIds = events.flatMap((event) =>
+    event.contributions.flatMap((item) => (item.dueId ? [item.dueId] : [])),
+  );
+  const dues = dueIds.length
+    ? await prisma.due.findMany({
+        where: { id: { in: dueIds } },
+        select: { id: true, status: true },
+      })
+    : [];
+  const statuses = new Map(dues.map((due) => [due.id, due.status]));
+  return events.map((event) => ({
+    ...toPublicEvent(event),
+    contributionProgress: contributionProgress(
+      event.contributions.map((item) => (item.dueId ? (statuses.get(item.dueId) ?? null) : null)),
+    ),
+  }));
 }
 
 const publicCommentSelect = {

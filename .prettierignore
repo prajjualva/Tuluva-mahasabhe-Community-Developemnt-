@@ -7,3 +7,4 @@ uploads-ci/
 *.log
 *.tsbuildinfo
 prisma/generated/
+.stakeholder-export/

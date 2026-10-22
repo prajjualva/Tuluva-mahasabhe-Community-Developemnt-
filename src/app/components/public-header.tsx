@@ -1,16 +1,12 @@
 import Link from "next/link";
+import { OrganizationBrand } from "./organization-brand";
 export function PublicHeader() {
   return (
     <header className="public-header">
-      <Link className="brand-lockup" href="/">
-        <span className="brand-seal" aria-hidden="true">
-          CS
-        </span>
-        <span>
-          Community Support<small>FOUNDATION</small>
-        </span>
-      </Link>
+      <OrganizationBrand />
       <div className="public-links">
+        <Link href="/about">About Tuluworld</Link>
+        {process.env.NODE_ENV !== "production" && <Link href="/demo">Explore demo</Link>}
         <Link href="/death-support-events">Support events</Link>
         <Link href="/login">
           Member sign in <span aria-hidden="true">↗</span>

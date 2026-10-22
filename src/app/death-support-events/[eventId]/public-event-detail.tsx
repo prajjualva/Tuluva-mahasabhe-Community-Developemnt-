@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import type { PublicDeathSupportEvent } from "../published-event-list";
+import { EventProgress } from "../event-card";
 
 type Condolence = {
   externalId: string;
@@ -114,6 +115,7 @@ export function PublicEventDetail({ eventId }: { eventId: string }) {
               Place of death: {event.placeOfDeath}
             </p>
             {event.publicDetails && <p>{event.publicDetails}</p>}
+            {event.contributionProgress && <EventProgress progress={event.contributionProgress} />}
             <p className="muted">
               This notice intentionally excludes private evidence, internal review notes, nominee
               information, and bank details.

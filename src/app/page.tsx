@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicHeader } from "./components/public-header";
+import { organization } from "../content/organization";
 
 export default function Home() {
   return (
@@ -7,15 +8,15 @@ export default function Home() {
       <PublicHeader />
       <main className="home-page">
         <section className="home-hero">
-          <p className="eyebrow">COMMUNITY SUPPORT FOUNDATION</p>
+          <p className="eyebrow">TULUWORLD FOUNDATION · COMMUNITY SUPPORT</p>
           <h1>
             Rooted in community.
             <br />
             <em>Here for one another.</em>
           </h1>
           <p className="hero-description">
-            A transparent, member-led foundation connecting families, Coordinators and community
-            support in one place.
+            A TuluWorld Foundation platform connecting families, Coordinators and community support
+            in one place.
           </p>
           <div className="hero-actions">
             <Link className="button-link" href="/register">
@@ -27,6 +28,16 @@ export default function Home() {
             <span>People first</span>
             <span>Transparent records</span>
             <span>Community care</span>
+          </div>
+        </section>
+        <section className="organization-home-intro" aria-labelledby="organisation-heading">
+          <div>
+            <p className="eyebrow">ROOTED IN TULU NADU</p>
+            <h2 id="organisation-heading">The organisation behind our community.</h2>
+          </div>
+          <div>
+            <p>{organization.introduction}</p>
+            <Link href="/about">About TuluWorld Foundation →</Link>
           </div>
         </section>
         <section className="home-services" aria-label="Foundation services">
@@ -76,7 +87,8 @@ export default function Home() {
           </Link>
         </section>
         <footer className="public-footer">
-          Community Support Foundation · Community support, not insurance.
+          TuluWorld Foundation · Community support, not insurance.{" "}
+          <Link href="/about">About us</Link>
         </footer>
       </main>
     </>

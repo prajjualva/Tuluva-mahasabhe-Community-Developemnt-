@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { SignOutButton } from "../member/sign-out-button";
+import { OrganizationBrand } from "./organization-brand";
 type Panel = { id: string; label: string; description: string; content: ReactNode };
 export function OperationsShell({
   role,
@@ -25,14 +26,7 @@ export function OperationsShell({
   return (
     <div className="shell operations-shell">
       <aside className="portal-sidebar">
-        <Link className="brand-lockup" href="/">
-          <span className="brand-seal" aria-hidden="true">
-            CS
-          </span>
-          <span>
-            Community Support<small>FOUNDATION</small>
-          </span>
-        </Link>
+        <OrganizationBrand onDark />
         <p className="portal-role">{role} workspace</p>
         <button
           className="mobile-nav-toggle"
@@ -65,7 +59,7 @@ export function OperationsShell({
       </aside>
       <section className="workspace">
         <header className="workspace-topbar">
-          <span>Community Support Foundation</span>
+          <span>TuluWorld Foundation · Community Support</span>
           <span className="access-pill">{role} access</span>
         </header>
         <main id={selected.id}>

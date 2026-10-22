@@ -1,6 +1,7 @@
 import { publicErrorMessage } from "../../../../../server/http/public-error";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { assertDuePayable } from "../../../../../server/payments/payment-integrity";
 import { requireApiPermission } from "../../../../../server/http/authorize";
 import {
   memberIdForUser,
@@ -39,17 +40,27 @@ export async function POST(request: NextRequest) {
         method: true,
         status: true,
         amountPaise: true,
-        due: { select: { externalId: true, purpose: true } },
+        due: { select: { externalId: true, purpose: true, status: true, dueAt: true } },
       },
     });
     if (existing) {
       if (
         existing.memberId !== memberId ||
-        existing.method !== body.method ||
+        (existing.method !== body.method &&
+          !(body.method === "ONLINE" && existing.method === "WALLET")) ||
         existing.due?.purpose !== "CONTRIBUTION"
       )
         throw new Error("Idempotency key is already in use");
+      if (body.eventExternalId) {
+        const sameEvent = await prisma.contribution.findFirst({
+          where: { memberId, dueId: existing.dueId, event: { externalId: body.eventExternalId } },
+          select: { id: true },
+        });
+        if (!sameEvent) throw new Error("Idempotency key is already in use");
+      }
       if (existing.method === "ONLINE" && existing.status === "PENDING") {
+        if (!existing.due) throw new Error("Contribution due is not payable");
+        assertDuePayable(existing.due);
         const checkout = await createOnlineCheckout({
           paymentId: existing.id,
           paymentExternalId: existing.externalId,
@@ -65,6 +76,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           externalId: existing.externalId,
           status: existing.status,
+          method: existing.method,
+          amountPaise: existing.amountPaise,
           dueExternalId: existing.due?.externalId,
           checkout: checkout.checkout,
         });
@@ -72,6 +85,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         externalId: existing.externalId,
         status: existing.status,
+        method: existing.method,
+        amountPaise: existing.amountPaise,
         dueExternalId: existing.due?.externalId,
       });
     }
@@ -86,6 +101,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         externalId: settled.payment.externalId,
         status: settled.payment.status,
+        method: settled.payment.method,
+        amountPaise: settled.payment.amountPaise,
         dueExternalId: due.externalId,
       });
     }
@@ -106,6 +123,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         externalId: settled.payment.externalId,
         status: settled.payment.status,
+        method: settled.payment.method,
+        amountPaise: settled.payment.amountPaise,
         dueExternalId: due.externalId,
       });
     }
@@ -137,6 +156,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       externalId: payment.externalId,
       status: payment.status,
+      method: payment.method,
+      amountPaise: payment.amountPaise,
       dueExternalId: due.externalId,
       checkout: checkout.checkout,
     });

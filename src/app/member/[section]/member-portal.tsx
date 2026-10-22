@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MemberCommunications } from "../member-communications";
 import { MemberProfile } from "../member-profile";
+import { readMemberRecord } from "../member-record-loader";
+import { paymentStartFeedback, paymentPurposeLabel } from "../payment-feedback";
 
 type Due = {
   externalId: string;
@@ -85,9 +87,32 @@ async function openGatewayCheckout(checkout: Checkout) {
 }
 
 export function MemberPortal({ section }: { section: string }) {
+  const pageCopy: Record<string, [string, string]> = {
+    "payments-receipts": [
+      "Payments & Receipts",
+      "Track your payments and download official receipts.",
+    ],
+    dues: ["My dues", "View outstanding contributions and membership payments."],
+    wallet: ["Foundation Wallet", "See your wallet balance and recent movements."],
+    membership: ["My membership", "Check your membership status and renewal."],
+    "community-support-plan": [
+      "Community Support Plan",
+      "Follow your registration, payment deadline and waiting period.",
+    ],
+    notifications: ["Notifications", "Read your Foundation updates and reminders."],
+    "community-news": [
+      "Community news",
+      "Stay connected with news and conversations from your community.",
+    ],
+    dashboard: [
+      "My community, my membership",
+      "Your membership, community support and important updates—all in one place.",
+    ],
+  };
   const [plan, setPlan] = useState<Plan | null>(null);
   const [dues, setDues] = useState<Due[]>([]);
-  const [wallet, setWallet] = useState<number>(0);
+  const [wallet, setWallet] = useState<number | null>(null);
+  const [loadErrors, setLoadErrors] = useState<string[]>([]);
   const [walletActivity, setWalletActivity] = useState<WalletActivity[]>([]);
   const [payments, setPayments] = useState<
     Array<{
@@ -122,6 +147,7 @@ export function MemberPortal({ section }: { section: string }) {
     }
   }
   const load = async () => {
+    setLoading(true);
     try {
       const [
         planResult,
@@ -132,41 +158,39 @@ export function MemberPortal({ section }: { section: string }) {
         receiptResult,
         membershipResult,
       ] = await Promise.all([
-        fetch("/api/member/plan/status"),
-        fetch("/api/member/dues"),
-        fetch("/api/member/wallet"),
-        fetch("/api/member/wallet/activity?limit=20"),
-        fetch("/api/member/payments/history"),
-        fetch("/api/member/receipts"),
-        fetch("/api/member/membership/status"),
+        readMemberRecord<Plan>("/api/member/plan/status"),
+        readMemberRecord<Due[]>("/api/member/dues"),
+        readMemberRecord<{ balancePaise: number }>("/api/member/wallet"),
+        readMemberRecord<{ activity: WalletActivity[] }>("/api/member/wallet/activity?limit=20"),
+        readMemberRecord<typeof payments>("/api/member/payments/history"),
+        readMemberRecord<typeof receipts>("/api/member/receipts"),
+        readMemberRecord<Membership>("/api/member/membership/status"),
       ]);
-      if (planResult.ok) setPlan(await planResult.json());
-      if (dueResult.ok) setDues(await dueResult.json());
-      if (walletResult.ok) setWallet((await walletResult.json()).balancePaise);
-      if (walletActivityResult.ok) {
-        const activityResponse = (await walletActivityResult.json()) as {
-          activity: WalletActivity[];
-        };
-        setWalletActivity(activityResponse.activity);
-      }
-      if (paymentResult.ok) setPayments(await paymentResult.json());
-      if (receiptResult.ok) setReceipts(await receiptResult.json());
-      if (membershipResult.ok) setMembership(await membershipResult.json());
-      if (
-        [
-          planResult,
-          dueResult,
-          walletResult,
-          walletActivityResult,
-          paymentResult,
-          receiptResult,
-          membershipResult,
-        ].some((result) => !result.ok)
-      )
+      setPlan(planResult.ok ? planResult.data : null);
+      setDues(dueResult.ok ? dueResult.data : []);
+      setWallet(walletResult.ok ? walletResult.data.balancePaise : null);
+      setWalletActivity(walletActivityResult.ok ? walletActivityResult.data.activity : []);
+      setPayments(paymentResult.ok ? paymentResult.data : []);
+      setReceipts(receiptResult.ok ? receiptResult.data : []);
+      setMembership(membershipResult.ok ? membershipResult.data : null);
+      const results = [
+        planResult,
+        dueResult,
+        walletResult,
+        walletActivityResult,
+        paymentResult,
+        receiptResult,
+        membershipResult,
+      ];
+      const names = ["plan", "dues", "wallet", "activity", "payments", "receipts", "membership"];
+      const failed = names.filter((_, index) => !results[index].ok);
+      setLoadErrors(failed);
+      if (failed.length)
         setMessage(
           "Some records could not be loaded. Your session may have expired; sign in again or refresh to retry.",
         );
     } catch {
+      setLoadErrors(["plan", "dues", "wallet", "activity", "payments", "receipts", "membership"]);
       setMessage("Could not load your records. Check your connection and refresh to retry.");
     } finally {
       setLoading(false);
@@ -184,11 +208,7 @@ export function MemberPortal({ section }: { section: string }) {
     );
     await load();
   };
-  const handlePaymentStart = async (
-    result: Response,
-    method: "ONLINE" | "WALLET",
-    walletSuccessMessage: string,
-  ) => {
+  const handlePaymentStart = async (result: Response, walletSuccessMessage: string) => {
     const data = (await result.json()) as {
       checkout?: Checkout;
       error?: string;
@@ -209,9 +229,7 @@ export function MemberPortal({ section }: { section: string }) {
     }
     setMessage(
       result.ok
-        ? method === "WALLET" || (data.method === "WALLET" && data.status === "SUCCEEDED")
-          ? walletSuccessMessage
-          : "Online payment is awaiting the configured payment provider."
+        ? paymentStartFeedback(data, walletSuccessMessage)
         : (data.error ?? "Payment could not be started"),
     );
     await load();
@@ -222,14 +240,14 @@ export function MemberPortal({ section }: { section: string }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ dueId: due.externalId, method, idempotencyKey: key() }),
     });
-    await handlePaymentStart(result, method, "Wallet payment settled and receipt issued.");
+    await handlePaymentStart(result, "Wallet payment settled and receipt issued.");
   };
   const resumePayment = async (paymentExternalId: string) => {
     const response = await fetch(
       `/api/member/payments/${encodeURIComponent(paymentExternalId)}/resume`,
       { method: "POST" },
     );
-    await handlePaymentStart(response, "ONLINE", "Wallet payment settled.");
+    await handlePaymentStart(response, "Wallet payment settled.");
   };
   const payContribution = async (method: "ONLINE" | "WALLET", eventExternalId?: string) => {
     const result = await fetch("/api/member/contributions/pay", {
@@ -243,7 +261,6 @@ export function MemberPortal({ section }: { section: string }) {
     });
     await handlePaymentStart(
       result,
-      method,
       eventExternalId
         ? "Selected contribution paid from wallet and receipt issued."
         : "Oldest outstanding contribution paid from wallet and receipt issued.",
@@ -272,6 +289,7 @@ export function MemberPortal({ section }: { section: string }) {
     await load();
   };
   const viewReceipt = async (receiptNumber: string) => {
+    setSelectedReceipt(null);
     const result = await fetch(`/api/member/receipts/${encodeURIComponent(receiptNumber)}`);
     const receipt = (await result.json()) as ReceiptDetail & { error?: string };
     if (result.ok) setSelectedReceipt(receipt);
@@ -313,18 +331,9 @@ export function MemberPortal({ section }: { section: string }) {
     <main aria-busy={busy}>
       <fieldset className="portal-content" disabled={busy} aria-label="Member services">
         <p className="eyebrow">MEMBER PORTAL</p>
-        <h1>
-          {section === "dashboard"
-            ? "My community, my membership"
-            : section
-                .split("-")
-                .map((word) => word[0].toUpperCase() + word.slice(1))
-                .join(" ")}
-        </h1>
+        <h1>{pageCopy[section]?.[0] ?? "Member services"}</h1>
         <p className="page-description">
-          {section === "dashboard"
-            ? "Your membership, community support and important updates—all in one place."
-            : "Manage your Foundation records securely. Financial amounts and eligibility are determined by the Foundation's locked rules."}
+          {pageCopy[section]?.[1] ?? "Manage your Foundation membership securely."}
         </p>
         {loading && <p role="status">Loading your private records…</p>}
         {message && (
@@ -332,22 +341,41 @@ export function MemberPortal({ section }: { section: string }) {
             {message}
           </p>
         )}
+        {loadErrors.length > 0 && (
+          <p>
+            <button
+              onClick={() =>
+                void runAction(async () => {
+                  setMessage("");
+                  await load();
+                })
+              }
+            >
+              Retry loading records
+            </button>{" "}
+            <Link href="/login">Sign in again</Link>
+          </p>
+        )}
         {section === "dashboard" && <MemberProfile summary />}
         {section === "dashboard" && (
           <div className="grid member-quick-links">
             <Link href="/member/dues">
               <span>Outstanding obligations</span>
-              <strong>{loading ? "…" : dues.length}</strong>
+              <strong>
+                {loading ? "…" : loadErrors.includes("dues") ? "Unavailable" : dues.length}
+              </strong>
               <small>View dues & payment options →</small>
             </Link>
             <Link href="/member/wallet">
               <span>Foundation Wallet</span>
-              <strong>{loading ? "…" : money(wallet)}</strong>
+              <strong>{loading ? "…" : wallet === null ? "Unavailable" : money(wallet)}</strong>
               <small>View balance & activity →</small>
             </Link>
             <Link href="/member/payments-receipts">
               <span>Official receipts</span>
-              <strong>{loading ? "…" : receipts.length}</strong>
+              <strong>
+                {loading ? "…" : loadErrors.includes("receipts") ? "Unavailable" : receipts.length}
+              </strong>
               <small>View payments & receipts →</small>
             </Link>
           </div>
@@ -356,23 +384,30 @@ export function MemberPortal({ section }: { section: string }) {
           <article>
             <h2>Membership</h2>
             <p>
-              Status: <strong>{membership?.status ?? "Loading"}</strong>
+              Status:{" "}
+              <strong>{membership?.status ?? (loading ? "Loading…" : "Unavailable")}</strong>
             </p>
             <button
-              onClick={async () => {
-                const response = await fetch("/api/member/membership/refresh", { method: "POST" });
-                setMessage(
-                  response.ok
-                    ? "Membership renewal and status checked."
-                    : "Could not refresh membership.",
-                );
-                await load();
-              }}
+              onClick={() =>
+                void runAction(async () => {
+                  const response = await fetch("/api/member/membership/refresh", {
+                    method: "POST",
+                  });
+                  setMessage(
+                    response.ok
+                      ? "Membership renewal and status checked."
+                      : "Could not refresh membership.",
+                  );
+                  await load();
+                })
+              }
             >
               Check renewal and status
             </button>
             {membership?.status === "INACTIVE" && (
-              <button onClick={reactivate}>Reactivate after settling dues</button>
+              <button onClick={() => void runAction(reactivate)}>
+                Reactivate after settling dues
+              </button>
             )}
             {membership?.status === "CLOSED" && (
               <p>
@@ -386,7 +421,7 @@ export function MemberPortal({ section }: { section: string }) {
           <article>
             <h2>Community Support Plan</h2>
             <p>
-              Status: <strong>{plan?.status ?? "Loading"}</strong>
+              Status: <strong>{plan?.status ?? (loading ? "Loading…" : "Unavailable")}</strong>
             </p>
             {plan?.waitingEndsAt && (
               <p>
@@ -428,8 +463,8 @@ export function MemberPortal({ section }: { section: string }) {
               {dues.length ? (
                 dues.map((due) => (
                   <div key={due.externalId}>
-                    <strong>{due.purpose}</strong> — {money(due.amountPaise)} due{" "}
-                    {new Date(due.dueAt).toLocaleDateString()}{" "}
+                    <strong>{paymentPurposeLabel(due.purpose)}</strong> — {money(due.amountPaise)}{" "}
+                    due {new Date(due.dueAt).toLocaleDateString()}{" "}
                     {due.purpose === "CONTRIBUTION" ? (
                       due.contributionEventExternalId ? (
                         <>
@@ -477,7 +512,13 @@ export function MemberPortal({ section }: { section: string }) {
                   </div>
                 ))
               ) : (
-                <p>No payable dues.</p>
+                <p>
+                  {loading
+                    ? "Loading dues…"
+                    : loadErrors.includes("dues")
+                      ? "Dues are unavailable. Retry loading records."
+                      : "No payable dues."}
+                </p>
               )}
             </article>
             <article>
@@ -486,11 +527,21 @@ export function MemberPortal({ section }: { section: string }) {
                 receipts.map((receipt) => (
                   <p key={receipt.receiptNumber}>
                     {receipt.receiptNumber} · {new Date(receipt.issuedAt).toLocaleDateString()}
-                    <button onClick={() => viewReceipt(receipt.receiptNumber)}>View receipt</button>
+                    <button
+                      onClick={() => void runAction(() => viewReceipt(receipt.receiptNumber))}
+                    >
+                      View receipt
+                    </button>
                   </p>
                 ))
               ) : (
-                <p>No receipts yet.</p>
+                <p>
+                  {loading
+                    ? "Loading receipts…"
+                    : loadErrors.includes("receipts")
+                      ? "Receipts are unavailable. Retry loading records."
+                      : "No receipts yet."}
+                </p>
               )}
             </article>
             {selectedReceipt && (
@@ -533,7 +584,10 @@ export function MemberPortal({ section }: { section: string }) {
           <article>
             <h2>Foundation Wallet</h2>
             <p>
-              Available balance: <strong>{loading ? "Loading…" : money(wallet)}</strong>
+              Available balance:{" "}
+              <strong>
+                {loading ? "Loading…" : wallet === null ? "Unavailable" : money(wallet)}
+              </strong>
             </p>
             <p>
               Wallet credit is issued only by the Foundation and is automatically available for
@@ -554,7 +608,13 @@ export function MemberPortal({ section }: { section: string }) {
                 ))}
               </div>
             ) : (
-              <p>No wallet activity yet.</p>
+              <p>
+                {loading
+                  ? "Loading wallet activity…"
+                  : loadErrors.includes("activity")
+                    ? "Wallet activity is unavailable. Retry loading records."
+                    : "No wallet activity yet."}
+              </p>
             )}
           </article>
         )}
@@ -577,7 +637,13 @@ export function MemberPortal({ section }: { section: string }) {
               </p>
             ))
           ) : (
-            <p>No payments yet.</p>
+            <p>
+              {loading
+                ? "Loading payments…"
+                : loadErrors.includes("payments")
+                  ? "Payments are unavailable. Retry loading records."
+                  : "No payments yet."}
+            </p>
           )}
         </article>
       </fieldset>

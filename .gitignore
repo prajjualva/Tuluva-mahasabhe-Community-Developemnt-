@@ -2,6 +2,7 @@ node_modules/
 .npm-cache/
 .next/
 .next-validation/
+.stakeholder-export/
 coverage/
 .env
 .env.local

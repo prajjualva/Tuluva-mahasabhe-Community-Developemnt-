@@ -5,6 +5,8 @@ Do not use the development seed command in production.
 
 ## Required before launch
 
+The main-app deployment configuration, private S3 storage setup, authenticated Vercel cron jobs and fail-closed deployment checks are documented in [MAIN_APP_DEPLOYMENT.md](MAIN_APP_DEPLOYMENT.md). Use a separate project/database from the development app and public stakeholder demo.
+
 1. Set a production `DATABASE_URL` with a least-privilege database user.
 2. Set `AUTH_SECRET` to a new random secret of at least 32 characters.
    Set `BANK_ENCRYPTION_KEY` to a separate base64-encoded 32-byte key before enabling bank/nominee entry. Back this key up securely; changing or losing it without a data re-encryption migration makes existing records unreadable.
@@ -40,3 +42,9 @@ Do not use the development seed command in production.
 Automated tests and a successful build validate source behavior, not the deployed banking or delivery integrations. Before public launch, complete gateway sandbox capture/refund/webhook tests, a controlled real-money reconciliation, SMS/email delivery and abuse tests, HTTPS/proxy-origin tests, database backup/restore and encryption-key recovery, private storage retention/backup/access checks, monitoring/alerting, and an independent security review.
 
 Database integration tests create explicitly synthetic identities and financial fixtures and remove them afterward. Run them only against a dedicated development/test database, never a live member database. CI provisions its own PostgreSQL service.
+
+For local verification with a development PostgreSQL role that can create databases, `npm run test:database` creates a uniquely named disposable database, migrates it, installs development identities/settings there, and runs all tests against it. It removes that database and its synthetic fixtures afterward, including on test failure; it never migrates or seeds the application database. It also uses a separate temporary document directory. A failure to clean up is reported explicitly. Do not interrupt the process before cleanup finishes.
+
+Alternatively, provision and migrate a dedicated database yourself, then set `ISOLATED_TEST_DATABASE_URL` and `RUN_DB_INTEGRATION_TESTS=1`. Vitest rejects missing targets, non-PostgreSQL URLs, database names without a separate `test` segment, and targets matching the application/migration database. That naming guard does not replace real isolation.
+
+Dependency security findings and upgrade decisions are tracked in [the dependency review](DEPENDENCY_SECURITY_REVIEW.md). Outstanding advisories require review before release even when the app builds successfully.

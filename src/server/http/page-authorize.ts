@@ -9,7 +9,17 @@ export async function requirePagePermission(permission: string, nextPath: string
   if (!token) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
   try {
     return await requirePermissionForAccessToken(token, permission);
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ["Forbidden", "Coordinator access is suspended"].includes(error.message)
+    )
+      redirect("/access-denied");
+    if (
+      error instanceof Error &&
+      error.message === "Membership access is closed; contact Foundation Admin"
+    )
+      redirect("/account-unavailable");
     redirect(`/login?next=${encodeURIComponent(nextPath)}`);
   }
 }

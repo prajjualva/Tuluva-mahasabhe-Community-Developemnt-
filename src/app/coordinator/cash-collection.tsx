@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { readRecord } from "../components/read-record";
 
 type Due = {
   externalId: string;
@@ -16,15 +17,22 @@ export function CoordinatorCashCollection() {
   const [members, setMembers] = useState<Member[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const lock = useRef(false);
   const load = async () => {
-    const response = await fetch("/api/coordinator/members");
-    if (response.ok) setMembers(await response.json());
-    else setMessage("Sign in as an active Coordinator to view assigned members.");
+    setLoading(true);
+    const response = await readRecord<Member[]>("/api/coordinator/members");
+    setMembers(response.ok ? response.data : []);
+    setUnavailable(!response.ok);
+    setLoading(false);
   };
   useEffect(() => {
     void load();
   }, []);
   const recordCollection = async (member: Member, due: Due, method: "CASH" | "MANUAL") => {
+    if (lock.current) return;
+    lock.current = true;
     setBusy(true);
     try {
       const response = await fetch("/api/coordinator/cash", {
@@ -48,14 +56,25 @@ export function CoordinatorCashCollection() {
     } catch {
       setMessage("Could not reach the server. Refresh before trying again.");
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   };
   return (
     <article>
       <h2>Assigned-member payment collections</h2>
-      <p>{message}</p>
-      {members.length ? (
+      <p role="status">{message}</p>
+      {unavailable && (
+        <p role="status">
+          Assigned members could not be loaded.{" "}
+          <button disabled={loading || busy} onClick={() => void load()}>
+            Retry loading members
+          </button>
+        </p>
+      )}
+      {loading ? (
+        <p>Loading assigned members…</p>
+      ) : unavailable ? null : members.length ? (
         members.map((member) => (
           <section key={member.externalId}>
             <strong>{member.fullName}</strong>

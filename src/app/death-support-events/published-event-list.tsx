@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { ContributionProgress } from "../../domain/contribution-progress";
+import { EventCard } from "./event-card";
 
 export type PublicDeathSupportEvent = {
   externalId: string;
@@ -11,20 +12,20 @@ export type PublicDeathSupportEvent = {
   placeOfDeath: string;
   publicDetails: string | null;
   publishedAt: string | null;
+  contributionProgress?: ContributionProgress;
 };
-
-function formatDate(value: string) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Date not available" : parsed.toLocaleDateString();
-}
 
 /** Deliberately renders only the allowlisted public event fields returned by the API. */
 export function PublishedEventList() {
   const [events, setEvents] = useState<PublicDeathSupportEvent[]>([]);
   const [message, setMessage] = useState("Loading published events…");
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setFailed(false);
+    setMessage("Loading published events…");
     void (async () => {
       try {
         const response = await fetch("/api/death-events");
@@ -34,6 +35,7 @@ export function PublishedEventList() {
         };
         if (!active) return;
         if (!response.ok) {
+          setFailed(true);
           setMessage(data.error ?? "Published events are temporarily unavailable.");
           return;
         }
@@ -43,33 +45,25 @@ export function PublishedEventList() {
           published.length ? "" : "There are no published Death Support Events at this time.",
         );
       } catch {
-        if (active) setMessage("Published events are temporarily unavailable.");
+        if (active) {
+          setFailed(true);
+          setMessage("Published events are temporarily unavailable.");
+        }
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
 
   return (
     <section className="event-list" aria-live="polite">
       {message && <p role="status">{message}</p>}
+      {failed && (
+        <button onClick={() => setAttempt((value) => value + 1)}>Retry loading events</button>
+      )}
       {events.map((event) => (
-        <article key={event.externalId}>
-          <p className="eyebrow">
-            {event.status === "CLOSED"
-              ? "CLOSED DEATH SUPPORT EVENT"
-              : "PUBLISHED DEATH SUPPORT EVENT"}
-          </p>
-          <h2>{event.memberName}</h2>
-          <p>
-            {formatDate(event.dateOfDeath)} · {event.placeOfDeath}
-          </p>
-          {event.publicDetails && <p>{event.publicDetails}</p>}
-          <Link href={`/death-support-events/${encodeURIComponent(event.externalId)}`}>
-            View event and condolences
-          </Link>
-        </article>
+        <EventCard key={event.externalId} event={event} />
       ))}
     </section>
   );

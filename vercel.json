@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm ci && npm run db:generate",
+  "buildCommand": "npm run deploy:check && npm run build",
+  "crons": [
+    { "path": "/api/internal/jobs/membership-dues", "schedule": "0 0 * * *" },
+    { "path": "/api/internal/jobs/plan-reminders", "schedule": "10 1 * * *" },
+    { "path": "/api/internal/jobs/due-reminders", "schedule": "20 2 * * *" },
+    { "path": "/api/internal/jobs/cash-reconciliation", "schedule": "30 3 * * *" }
+  ]
+}

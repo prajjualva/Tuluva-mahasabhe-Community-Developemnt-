@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export function AdminWalletCredit() {
   const [memberExternalId, setMemberExternalId] = useState("");
@@ -9,13 +9,15 @@ export function AdminWalletCredit() {
   const [message, setMessage] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const commandLock = useRef(false);
   useEffect(() => {
     setIdempotencyKey(crypto.randomUUID());
   }, []);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || !idempotencyKey) return;
+    if (commandLock.current || !idempotencyKey) return;
+    commandLock.current = true;
     setBusy(true);
     try {
       const response = await fetch(
@@ -38,6 +40,7 @@ export function AdminWalletCredit() {
     } catch {
       setMessage("Could not reach the server. Retry with the same details.");
     } finally {
+      commandLock.current = false;
       setBusy(false);
     }
   };
@@ -48,32 +51,34 @@ export function AdminWalletCredit() {
       <p>
         Use only for an approved adjustment or refund. Your reason is recorded in the audit log.
       </p>
-      <p>{message}</p>
+      <p role="status">{message}</p>
       <form onSubmit={submit}>
-        <label>
-          Member external ID
-          <input
-            required
-            value={memberExternalId}
-            onChange={(event) => setMemberExternalId(event.target.value)}
-          />
-        </label>
-        <label>
-          Amount (₹)
-          <input
-            required
-            inputMode="decimal"
-            value={amountRupees}
-            onChange={(event) => setAmountRupees(event.target.value)}
-          />
-        </label>
-        <label>
-          Reason
-          <input required value={reason} onChange={(event) => setReason(event.target.value)} />
-        </label>
-        <button disabled={busy || !idempotencyKey} type="submit">
-          Record wallet credit
-        </button>
+        <fieldset disabled={busy}>
+          <label>
+            Member external ID
+            <input
+              required
+              value={memberExternalId}
+              onChange={(event) => setMemberExternalId(event.target.value)}
+            />
+          </label>
+          <label>
+            Amount (₹)
+            <input
+              required
+              inputMode="decimal"
+              value={amountRupees}
+              onChange={(event) => setAmountRupees(event.target.value)}
+            />
+          </label>
+          <label>
+            Reason
+            <input required value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+          <button disabled={busy || !idempotencyKey} type="submit">
+            Record wallet credit
+          </button>
+        </fieldset>
       </form>
     </article>
   );

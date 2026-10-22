@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAllowedMutationOrigin } from "./server/security/request-policy";
 
 export function middleware(request: NextRequest) {
+  // Do not stream a presentation-only route behind an HTTP 200 loading shell.
+  // This gate also protects client navigations and the legacy demo-event URL.
+  if (
+    process.env.NODE_ENV === "production" &&
+    (request.nextUrl.pathname === "/demo" ||
+      request.nextUrl.pathname.startsWith("/demo/") ||
+      request.nextUrl.pathname === "/death-support-events/demo")
+  )
+    return new NextResponse("Not found", { status: 404 });
   const requestId = crypto.randomUUID();
   if (
     request.nextUrl.pathname.startsWith("/api/") &&

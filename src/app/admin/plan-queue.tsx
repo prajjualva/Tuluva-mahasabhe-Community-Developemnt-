@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { readRecord } from "../components/read-record";
 
 type Plan = {
   externalId: string;
@@ -18,14 +19,33 @@ export function AdminPlanQueue() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [dues, setDues] = useState<PlanDue[]>([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const run = async (operation: () => Promise<void>) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    try {
+      await operation();
+    } catch {
+      setMessage("This change could not be confirmed. Refresh the queue before retrying.");
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
   const load = async () => {
+    setLoading(true);
     const [plansResponse, duesResponse] = await Promise.all([
-      fetch("/api/admin/plans"),
-      fetch("/api/admin/plan-dues"),
+      readRecord<Plan[]>("/api/admin/plans"),
+      readRecord<PlanDue[]>("/api/admin/plan-dues"),
     ]);
-    if (plansResponse.ok) setPlans(await plansResponse.json());
-    else setMessage("Sign in as an Administrator to review this queue.");
-    if (duesResponse.ok) setDues(await duesResponse.json());
+    setPlans(plansResponse.ok ? plansResponse.data : []);
+    setDues(duesResponse.ok ? duesResponse.data : []);
+    setUnavailable(!plansResponse.ok || !duesResponse.ok);
+    setLoading(false);
   };
   useEffect(() => {
     void load();
@@ -46,7 +66,9 @@ export function AdminPlanQueue() {
     });
     setMessage(
       response.ok
-        ? "Plan approved. The six-month waiting period has been recorded."
+        ? coverage
+          ? "Coordinator-stage review recorded. Final Admin approval is still required."
+          : "Final plan approval recorded. The initial waiting period is available in the plan history."
         : "Approval was denied.",
     );
     await load();
@@ -91,8 +113,18 @@ export function AdminPlanQueue() {
     <>
       <article>
         <h2>Community Support Plan approvals</h2>
-        <p>{message}</p>
-        {plans.length ? (
+        <p role="status">{message}</p>
+        {unavailable && (
+          <p role="status">
+            Some plan records are unavailable.{" "}
+            <button disabled={loading || busy} onClick={() => void load()}>
+              Retry loading plans
+            </button>
+          </p>
+        )}
+        {loading ? (
+          <p>Loading plan approvals…</p>
+        ) : unavailable ? null : plans.length ? (
           plans.map((plan) => (
             <div key={plan.externalId}>
               <strong>{plan.member.fullName}</strong>
@@ -100,7 +132,7 @@ export function AdminPlanQueue() {
               <p>
                 Member ID: <code>{plan.member.externalId}</code>
               </p>
-              <button onClick={() => approve(plan)}>
+              <button disabled={busy} onClick={() => void run(() => approve(plan))}>
                 {plan.status === "PENDING_COORDINATOR_APPROVAL"
                   ? "Approve under temporary Admin coverage"
                   : "Approve plan"}
@@ -113,7 +145,9 @@ export function AdminPlanQueue() {
       </article>
       <article>
         <h2>Registration deadline extensions</h2>
-        {dues.length ? (
+        {loading ? (
+          <p>Loading registration deadlines…</p>
+        ) : unavailable ? null : dues.length ? (
           dues.map((due) => (
             <div key={due.externalId}>
               <strong>{due.member.fullName}</strong>
@@ -121,9 +155,11 @@ export function AdminPlanQueue() {
               <p>
                 Member ID: <code>{due.member.externalId}</code>
               </p>
-              <button onClick={() => extend(due.externalId)}>Extend with reason</button>
+              <button disabled={busy} onClick={() => void run(() => extend(due.externalId))}>
+                Extend with reason
+              </button>
               {(due.status === "PENDING" || due.status === "OVERDUE") && (
-                <button onClick={() => approveCash(due.externalId)}>
+                <button disabled={busy} onClick={() => void run(() => approveCash(due.externalId))}>
                   Allow Coordinator cash collection
                 </button>
               )}

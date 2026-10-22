@@ -65,6 +65,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof ThrottleError)
       return NextResponse.json({ error: error.message }, { status: 429 });
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    if (error instanceof z.ZodError || error instanceof SyntaxError)
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    // Infrastructure failures are not bad credentials. Keep diagnostics private
+    // and fail closed without issuing a session or inviting password changes.
+    return NextResponse.json(
+      { error: "Sign-in is temporarily unavailable. Please try again shortly." },
+      { status: 503 },
+    );
   }
 }

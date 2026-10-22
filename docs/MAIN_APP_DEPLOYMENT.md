@@ -1,0 +1,27 @@
+# Main application deployment (not the stakeholder demo)
+
+## Implemented source
+
+- `vercel.json` selects the real Next.js application, generates Prisma after installation, runs `deploy:check` before the production build, and declares four daily jobs in UTC. It does not use the standalone demo export.
+- The existing job handlers accept authenticated Vercel GETs through `CRON_SECRET`, or their existing authenticated POSTs through `INTERNAL_JOB_SECRET`. These must be distinct random secrets of at least 32 characters. User cookies and query-string credentials never authorize jobs. Jobs retain their existing bounded batches, transactional claims and idempotency; this integration does not change membership, expiry, contribution or suspension rules.
+- Death evidence supports private AWS S3 storage. Uploads use opaque UUID keys, no public ACL or presigned URL, server-side encryption and a conditional write that cannot overwrite an existing object. Downloads remain behind existing case/document permission checks. Reads are size-bounded and provider diagnostics are not exposed. Compensation removes only an upload whose metadata persistence failed; no settled financial records are removed.
+- Local document storage remains available for development and explicitly refuses Vercel's ephemeral filesystem. Existing local evidence is not automatically copied, deleted or made publicly available. Migrating real documents requires a separately verified migration/retention procedure.
+- `npm run deploy:check` performs configuration validation and read-only checks of the production database and private bucket. It refuses development identities, missing initial Admin access, database-superuser/role-creation privileges, missing encryption/versioning or incomplete Block Public Access. It never creates roles, deletes identities, changes bucket settings or writes financial records.
+
+## External setup still required
+
+1. Authenticate this computer's Git client with the owner's GitHub account. Do not paste personal access tokens or passwords into chat. Push the release branch and inspect GitHub CI before promotion.
+2. Create a **separate main-app Vercel project** from this repository. Do not overwrite the existing stakeholder-demo project or point production at the development database.
+3. Provision the production PostgreSQL database and a least-privilege application role. An operational migration identity uses the direct/non-pooled `MIGRATION_DATABASE_URL`. Apply migrations and run the audited initial Admin bootstrap before opening access. Never run the development seed in production.
+4. Generate fresh production authentication/job secrets and a distinct bank-encryption key. Back up the encryption key securely; never rotate the development key in place to prepare production. Set the public HTTPS `APP_URL` and other values from `.env.example` in the main-app project's server environment. Set Node.js to 24.
+5. Supply a private AWS S3 bucket, `AWS_REGION`, `S3_PRIVATE_BUCKET`, and server-side workload credentials or a dedicated IAM identity. Set `UPLOAD_STORAGE=s3`. Enable all four Block Public Access controls, default encryption and versioning. Use bucket-owner-enforced ownership, HTTPS-only access, retention/backups and a tested restore process. The app needs object Get/Put/Delete only for `death-evidence/*`; the read-only preflight also needs bucket public-access, encryption and versioning inspection permissions. Do not give it bucket-policy, IAM or bucket-deletion privileges.
+6. Configure the email/SMS delivery bridges and test actual verification delivery. In-app reminder persistence is not proof of external delivery. Email/SMS transport credentials are server-only.
+7. A real payment gateway can be connected later. Leaving `PAYMENT_PROVIDER` unset keeps online payments unavailable; no fake success is introduced. Selecting Razorpay requires its key ID, secret and webhook secret. Complete sandbox capture/refund/webhook tests before enabling actual online collections.
+8. Run the gate and production build, then verify the deployed jobs in Vercel's logs and test the protected Member/Coordinator/Admin workflows. Hobby jobs run daily with approximate timing, so the current daily schedules are not an exact-time service guarantee. Track processed/backlog counts and duration against the bounded batch limits; larger membership volumes require an operational drain/retry scheduler within hosting limits, not silently assuming one daily invocation handles every backlog.
+9. Resolve or obtain independent security acceptance for the remaining dependency findings; complete backup/key recovery, document access/retention and incident-response checks. A passing source build or configuration gate is not public-launch approval.
+
+References: [Vercel cron authentication](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs), [cron plan limits](https://vercel.com/docs/cron-jobs/usage-and-pricing), [AWS S3 SDK](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/s3/).
+
+## Validation boundary
+
+S3 tests use a mocked SDK to validate private request construction, size bounds, error handling and routing. They do not prove the permissions, encryption, retention or reliability of a bucket that has not yet been provisioned. The preflight is expected to fail on the current development environment; that is a successful safety check, not a source/build failure. GitHub publishing and cloud configuration must be reported as pending until the external sign-in/setup is actually complete.
