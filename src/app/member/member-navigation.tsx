@@ -17,6 +17,7 @@ const links = [
   ["Death Support Events", "/death-support-events"],
   ["Report a death", "/death-report"],
   ["My cash remittances", "/member/cash-remittances"],
+  ["Platform guide", "/guide"],
 ] as const;
 export function MemberNavigation() {
   const path = usePathname();

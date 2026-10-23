@@ -59,6 +59,11 @@ export function deploymentReadiness(env: Environment) {
   if (env.UPLOAD_STORAGE !== "s3") errors.push("Serverless deployment requires UPLOAD_STORAGE=s3.");
   if (!env.S3_PRIVATE_BUCKET || !env.AWS_REGION)
     errors.push("A private S3 bucket and AWS region are required.");
+  if (
+    env.VERCEL === "1" &&
+    !/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(env.AWS_ROLE_ARN ?? "")
+  )
+    errors.push("Vercel private storage requires a valid AWS_ROLE_ARN workload role.");
   for (const channel of ["EMAIL", "SMS"]) {
     https(`${channel}_TRANSPORT_URL`);
     if (!env[`${channel}_TRANSPORT_TOKEN`])

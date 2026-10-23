@@ -14,7 +14,7 @@
 2. Per the owner's 23 October instruction, replace the existing `tuluva-mahasabhe` stakeholder-demo deployment with the main app, retaining `tuluva-mahasabhe.vercel.app`. Connect the validated release branch to that existing Vercel project. Keep the old successful deployment available for rollback and do not promote a replacement until the production configuration passes the gate. Do not point public production at the development database.
 3. Provision the production PostgreSQL database and a least-privilege application role. An operational migration identity uses the direct/non-pooled `MIGRATION_DATABASE_URL`. Apply migrations and run the audited initial Admin bootstrap before opening access. Never run the development seed in production.
 4. Generate fresh production authentication/job secrets and a distinct bank-encryption key. Back up the encryption key securely; never rotate the development key in place to prepare production. Set the public HTTPS `APP_URL` and other values from `.env.example` in the main-app project's server environment. Set Node.js to 24.
-5. Supply a private AWS S3 bucket, `AWS_REGION`, `S3_PRIVATE_BUCKET`, and server-side workload credentials or a dedicated IAM identity. Set `UPLOAD_STORAGE=s3`. Enable all four Block Public Access controls, default encryption and versioning. Use bucket-owner-enforced ownership, HTTPS-only access, retention/backups and a tested restore process. The app needs object Get/Put/Delete only for `death-evidence/*`; the read-only preflight also needs bucket public-access, encryption and versioning inspection permissions. Do not give it bucket-policy, IAM or bucket-deletion privileges.
+5. Supply a private AWS S3 bucket, `AWS_REGION`, `S3_PRIVATE_BUCKET`, and a server-side workload role. Vercel uses `AWS_ROLE_ARN` with short-lived OIDC federation; its runtime and build gate refuse missing roles instead of falling back to permanent access keys. Set `UPLOAD_STORAGE=s3`. Enable all four Block Public Access controls, default encryption and versioning. Use bucket-owner-enforced ownership, HTTPS-only access, retention/backups and a tested restore process. The app needs object Get/Put/Delete only for `death-evidence/*`; the read-only preflight also needs bucket public-access, encryption and versioning inspection permissions. Do not give it bucket-policy, IAM or bucket-deletion privileges.
 6. Configure the email/SMS delivery bridges and test actual verification delivery. In-app reminder persistence is not proof of external delivery. Email/SMS transport credentials are server-only.
 7. A real payment gateway can be connected later. Leaving `PAYMENT_PROVIDER` unset keeps online payments unavailable; no fake success is introduced. Selecting Razorpay requires its key ID, secret and webhook secret. Complete sandbox capture/refund/webhook tests before enabling actual online collections.
 8. Run the gate and production build, then verify the deployed jobs in Vercel's logs and test the protected Member/Coordinator/Admin workflows. Hobby jobs run daily with approximate timing, so the current daily schedules are not an exact-time service guarantee. Track processed/backlog counts and duration against the bounded batch limits; larger membership volumes require an operational drain/retry scheduler within hosting limits, not silently assuming one daily invocation handles every backlog.
@@ -24,4 +24,39 @@ References: [Vercel cron authentication](https://vercel.com/docs/cron-jobs/manag
 
 ## Validation boundary
 
-S3 tests use a mocked SDK to validate private request construction, size bounds, error handling and routing. They do not prove the permissions, encryption, retention or reliability of a bucket that has not yet been provisioned. The preflight is expected to fail on the current development environment; that is a successful safety check, not a source/build failure. GitHub publishing and cloud configuration must be reported as pending until the external sign-in/setup is actually complete.
+### Provisioned private bucket — 23 October 2026
+
+With the owner's explicit approval, the following empty S3 bucket was created through the AWS console:
+
+```text
+AWS_REGION=ap-south-2
+S3_PRIVATE_BUCKET=tuluva-foundation-documents-prod-20261023-f8b2c4
+```
+
+The console confirmed successful creation and the persisted settings: Hyderabad region, versioning enabled, default SSE-S3 encryption, bucket-owner-enforced ownership (ACLs disabled), and all four Block Public Access controls enabled. No documents were uploaded and no AWS plan or support subscription was changed. Workload access was separately authorized and configured as described below; no IAM user or access keys were created.
+
+### Production-only workload access — 23 October 2026
+
+- After explicit owner approval, created the IAM OIDC provider `https://oidc.vercel.com/tuluworld` with audience `https://vercel.com/tuluworld`. Verified these values against the existing Vercel project's Security settings; no issuer setting was changed.
+- Created role `tuluva-main-app-documents-production` with a single inline policy, `PrivateDocumentsAndSecurityRead`. Its persisted trust uses `StringEquals` for both audience and subject `owner:tuluworld:project:tuluva-mahasabhe:environment:production`. No project/environment wildcard is trusted. Preview/development are intentionally excluded.
+- The role allows only `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` on this bucket's `death-evidence/*`, and `s3:GetBucketPublicAccessBlock`, `s3:GetEncryptionConfiguration`, `s3:GetBucketVersioning` on this bucket. Both allow statements require `aws:SecureTransport=true`. It has no bucket administration, IAM, other-bucket, object-version deletion or bucket-list permission. A versioned delete is a compensating delete marker, not permanent erasure of historical versions.
+- Saved the following non-secret values to this existing Vercel project's **Production environment only**:
+
+```text
+AWS_REGION=ap-south-2
+S3_PRIVATE_BUCKET=tuluva-foundation-documents-prod-20261023-f8b2c4
+AWS_ROLE_ARN=arn:aws:iam::360908957233:role/tuluva-main-app-documents-production
+UPLOAD_STORAGE=s3
+```
+
+- No permanent credentials, root keys, secrets in chat, deployment or production database changes were used. Vercel confirmed that a new deployment is needed for the saved settings to take effect; no redeploy was requested.
+- Added the official `@vercel/oidc-aws-credentials-provider` integration to the document client and deployment preflight, using requested 15-minute STS sessions. Local non-Vercel workloads retain the existing AWS SDK credential chain. An invalid/configured workload role never falls back silently to permanent keys.
+- Added five focused tests for workload selection, no permanent-key fallback, invalid-role redaction, the non-Vercel local chain and the production configuration gate. The current normal suite passes 220 tests, with 15 isolated PostgreSQL cases intentionally skipped; the preceding full isolated database run remains documented in the workflow QA report. No financial logic or records were changed.
+
+A bucket-wide `DenyInsecureTransport` policy was subsequently saved and verified in the persisted Permissions view. It denies all S3 actions on this bucket and its objects over HTTP for non-AWS-service principals, following AWS's service-principal exclusion guidance; the exclusion grants no access. All public-access blocks remain enabled.
+
+This is cloud configuration and source validation, not a successful live document transfer or production-readiness claim. The new adapter code is local until explicitly pushed/deployed. Live production OIDC exchange/upload/download/compensation tests, private-route authorization acceptance, version recovery and retention/backup acceptance remain separate launch tasks. Do not point a local development instance at production documents to test this role. Keep production secrets out of this document and chat; never use root access keys.
+
+References: [Vercel AWS federation](https://vercel.com/docs/oidc/aws), [OIDC credential-provider reference](https://vercel.com/docs/oidc/reference), [S3 public-access inspection permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetPublicAccessBlock.html).
+
+S3 tests use a mocked SDK to validate private request construction, credential selection, size bounds, error handling and routing. They do not prove a deployed OIDC exchange, live transfer, retention or reliability. The preflight is expected to fail on the current development environment; that is a successful safety check, not a source/build failure. Cloud provisioning above is complete only to its stated boundary; live production validation and other external services remain pending.

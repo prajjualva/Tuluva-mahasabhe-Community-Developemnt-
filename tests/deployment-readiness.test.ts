@@ -48,4 +48,14 @@ describe("deployment readiness configuration", () => {
       deploymentReadiness({ ...configuration(), PAYMENT_PROVIDER: "razorpay" }).errors,
     ).toHaveLength(1);
   });
+  it("requires a workload role on Vercel without exposing invalid role values", () => {
+    const env = { ...configuration(), VERCEL: "1", AWS_ROLE_ARN: "private-invalid-value" };
+    const result = deploymentReadiness(env);
+    expect(result.errors).toContain(
+      "Vercel private storage requires a valid AWS_ROLE_ARN workload role.",
+    );
+    expect(JSON.stringify(result)).not.toContain("private-invalid-value");
+    env.AWS_ROLE_ARN = "arn:aws:iam::123456789012:role/private-documents";
+    expect(deploymentReadiness(env).errors).toEqual([]);
+  });
 });

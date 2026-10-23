@@ -1,11 +1,11 @@
 import { Client } from "pg";
 import {
-  S3Client,
   GetPublicAccessBlockCommand,
   GetBucketEncryptionCommand,
   GetBucketVersioningCommand,
 } from "@aws-sdk/client-s3";
 import { deploymentReadiness } from "../src/server/deployment/readiness";
+import { createPrivateS3Client } from "../src/server/documents/private-s3-client";
 
 async function main() {
   try {
@@ -53,7 +53,7 @@ async function main() {
   } finally {
     await database.end();
   }
-  const storage = new S3Client({ region: process.env.AWS_REGION, maxAttempts: 2 });
+  const storage = createPrivateS3Client(2);
   const input = { Bucket: process.env.S3_PRIVATE_BUCKET };
   try {
     const options = { abortSignal: AbortSignal.timeout(15000) };

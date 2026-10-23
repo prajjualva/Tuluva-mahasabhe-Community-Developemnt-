@@ -5,7 +5,7 @@ export default function MemberLayout({ children }: Readonly<{ children: React.Re
   return (
     <div className="shell">
       <aside className="portal-sidebar">
-        <OrganizationBrand onDark />
+        <OrganizationBrand />
         <p className="portal-role">Member workspace</p>
         <MemberNavigation />
         <SignOutButton />

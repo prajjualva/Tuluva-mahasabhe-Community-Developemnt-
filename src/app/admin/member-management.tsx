@@ -1,5 +1,7 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { readRecord } from "../components/read-record";
+import { paymentPurposeLabel } from "../member/payment-feedback";
 
 type Member = {
   externalId: string;
@@ -89,40 +91,63 @@ export function AdminMemberManagement() {
   const [message, setMessage] = useState("");
   const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [choicesStatus, setChoicesStatus] = useState<"loading" | "ready" | "unavailable">(
+    "loading",
+  );
+  const searchSequence = useRef(0);
+  const commandLock = useRef(false);
   const load = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ page: String(page), search: query.search });
-      if (query.status) params.set("status", query.status);
-      const response = await fetch(`/api/admin/members?${params}`);
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Member search failed");
-      setMembers(body.members);
-      setTotal(body.total);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Member search failed");
-    }
+    const sequence = ++searchSequence.current;
+    setLoading(true);
+    setUnavailable(false);
+    setMembers([]);
+    setTotal(0);
+    setDetail(null);
+    const params = new URLSearchParams({ page: String(page), search: query.search });
+    if (query.status) params.set("status", query.status);
+    const response = await readRecord<{ members: Member[]; total: number }>(
+      `/api/admin/members?${params}`,
+    );
+    if (sequence !== searchSequence.current) return;
+    if (response.ok) {
+      setMembers(response.data.members);
+      setTotal(response.data.total);
+    } else setUnavailable(true);
+    setLoading(false);
   }, [page, query]);
   useEffect(() => {
     void load();
+    return () => {
+      searchSequence.current += 1;
+    };
   }, [load]);
-  useEffect(() => {
-    void fetch("/api/admin/coordinators")
-      .then(async (response) => {
-        if (response.ok) setCoordinators((await response.json()).coordinators);
-      })
-      .catch(() => setMessage("Coordinator list could not be loaded."));
+  const loadCoordinators = useCallback(async () => {
+    setChoicesStatus("loading");
+    const response = await readRecord<{ coordinators: Coordinator[] }>("/api/admin/coordinators");
+    setCoordinators(response.ok ? response.data.coordinators : []);
+    setChoicesStatus(response.ok ? "ready" : "unavailable");
   }, []);
-  const open = async (id: string) => {
-    setBusy(true);
+  useEffect(() => {
+    void loadCoordinators();
+  }, [loadCoordinators]);
+  const open = async (id: string, refresh = false) => {
+    if (!refresh && commandLock.current) return;
+    if (!refresh) {
+      commandLock.current = true;
+      setBusy(true);
+    }
+    setDetail(null);
     try {
-      const response = await fetch(`/api/admin/members/${id}`);
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Profile unavailable");
-      setDetail(body);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Profile unavailable");
+      const response = await readRecord<Detail>(`/api/admin/members/${id}`);
+      if (response.ok) setDetail(response.data);
+      else setMessage("This member profile is unavailable. Retry opening it or sign in again.");
     } finally {
-      setBusy(false);
+      if (!refresh) {
+        commandLock.current = false;
+        setBusy(false);
+      }
     }
   };
   const command = async (
@@ -131,7 +156,9 @@ export function AdminMemberManagement() {
     payload: (form: FormData) => unknown,
   ) => {
     event.preventDefault();
+    if (commandLock.current) return;
     const form = new FormData(event.currentTarget);
+    commandLock.current = true;
     setBusy(true);
     try {
       const response = await fetch(path, {
@@ -143,10 +170,11 @@ export function AdminMemberManagement() {
       if (!response.ok) throw new Error(body.error ?? "Action denied");
       setMessage("Change saved with Admin identity, timestamp and reason.");
       await load();
-      if (detail) await open(detail.externalId);
+      if (detail) await open(detail.externalId, true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Change failed");
     } finally {
+      commandLock.current = false;
       setBusy(false);
     }
   };
@@ -157,6 +185,7 @@ export function AdminMemberManagement() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (commandLock.current) return;
           const form = new FormData(event.currentTarget);
           setPage(1);
           setQuery({
@@ -178,9 +207,21 @@ export function AdminMemberManagement() {
             ))}
           </select>
         </label>
-        <button>Find members</button>
+        <button disabled={busy}>Find members</button>
       </form>
-      <p>{total} members found</p>
+      {loading ? (
+        <p role="status">Loading members…</p>
+      ) : unavailable ? (
+        <p role="status">
+          Member records are unavailable. Check your connection or sign in again.{" "}
+          <button disabled={busy} onClick={() => void load()}>
+            Retry loading members
+          </button>
+        </p>
+      ) : (
+        <p>{total} members found</p>
+      )}
+      {!loading && !unavailable && !members.length && <p>No members match these filters.</p>}
       <div className="table-scroll">
         <table>
           <thead>
@@ -215,11 +256,17 @@ export function AdminMemberManagement() {
           </tbody>
         </table>
       </div>
-      <button disabled={page === 1} onClick={() => setPage((value) => value - 1)}>
+      <button
+        disabled={busy || loading || unavailable || page === 1}
+        onClick={() => setPage((value) => value - 1)}
+      >
         Previous members
       </button>
       <span> Page {page} </span>
-      <button disabled={page * 30 >= total} onClick={() => setPage((value) => value + 1)}>
+      <button
+        disabled={busy || loading || unavailable || page * 30 >= total}
+        onClick={() => setPage((value) => value + 1)}
+      >
         Next members
       </button>
       {detail && (
@@ -274,7 +321,7 @@ export function AdminMemberManagement() {
             <summary>Dues, payments and receipts</summary>
             {detail.dues.map((due) => (
               <p key={due.externalId}>
-                {due.purpose} · {money(due.amountPaise)} · {due.status} ·{" "}
+                {paymentPurposeLabel(due.purpose)} · {money(due.amountPaise)} · {due.status} ·{" "}
                 {new Date(due.dueAt).toLocaleDateString("en-IN")}
               </p>
             ))}
@@ -371,7 +418,7 @@ export function AdminMemberManagement() {
             >
               <label>
                 Assign / transfer to
-                <select name="coordinator" required>
+                <select name="coordinator" required disabled={busy || choicesStatus !== "ready"}>
                   <option value="">Choose active Coordinator</option>
                   {coordinators
                     .filter((row) => row.status === "ACTIVE")
@@ -386,7 +433,16 @@ export function AdminMemberManagement() {
                 Reason
                 <textarea name="reason" minLength={3} maxLength={1000} required />
               </label>
-              <button disabled={busy}>Save assignment</button>
+              {choicesStatus === "loading" && <p role="status">Loading active Coordinators…</p>}
+              {choicesStatus === "unavailable" && (
+                <p role="status">
+                  Coordinator choices are unavailable.{" "}
+                  <button type="button" disabled={busy} onClick={() => void loadCoordinators()}>
+                    Retry Coordinator choices
+                  </button>
+                </p>
+              )}
+              <button disabled={busy || choicesStatus !== "ready"}>Save assignment</button>
             </form>
             <form
               onSubmit={(event) =>

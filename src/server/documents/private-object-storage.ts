@@ -1,10 +1,6 @@
-import {
-  GetObjectCommand,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import type { Readable } from "node:stream";
+import { createPrivateS3Client } from "./private-s3-client";
 
 export const MAX_PRIVATE_OBJECT_BYTES = 10 * 1024 * 1024;
 const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -18,9 +14,9 @@ function storage() {
   const bucket = process.env.S3_PRIVATE_BUCKET;
   const region = process.env.AWS_REGION;
   if (!bucket || !region) throw new Error("Private document storage is not configured");
-  // The AWS credential chain supports workload roles or server-only credentials.
+  // Vercel uses a production-scoped OIDC role; local credentials stay server-only.
   // No public URLs, browser credentials or caller-controlled endpoints are used.
-  return { bucket, client: new S3Client({ region, maxAttempts: 3 }) };
+  return { bucket, client: createPrivateS3Client(3) };
 }
 
 export async function putPrivateObject(key: string, bytes: Buffer, contentType: string) {

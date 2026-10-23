@@ -6,6 +6,7 @@ export function PublicHeader() {
       <OrganizationBrand />
       <div className="public-links">
         <Link href="/about">About Tuluworld</Link>
+        <Link href="/guide">Guide</Link>
         {process.env.NODE_ENV !== "production" && <Link href="/demo">Explore demo</Link>}
         <Link href="/death-support-events">Support events</Link>
         <Link href="/login">

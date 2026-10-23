@@ -73,6 +73,42 @@ export default function Home() {
             </article>
           </div>
         </section>
+        <section className="home-guide" aria-labelledby="how-it-works-heading">
+          <div>
+            <p className="eyebrow">A CLEARER WAY FORWARD</p>
+            <h2 id="how-it-works-heading">How it all connects.</h2>
+            <p className="page-description">
+              Start with a question. Open a step to see where it takes you.
+            </p>
+            <Link href="/guide">Explore the full platform guide →</Link>
+          </div>
+          <div>
+            <details>
+              <summary>01 — Your membership</summary>
+              <p>
+                Create your account, maintain your profile and nominee, and track your membership
+                status in one private workspace.
+              </p>
+              <Link href="/member/membership">View membership →</Link>
+            </details>
+            <details>
+              <summary>02 — Contributions & records</summary>
+              <p>
+                Review your dues, use an available payment method, and check confirmed wallet
+                movements and official receipts.
+              </p>
+              <Link href="/member/payments-receipts">Open payments & receipts →</Link>
+            </details>
+            <details>
+              <summary>03 — Support, with review</summary>
+              <p>
+                Submit a death report or read published events. The Foundation reviews evidence and
+                eligibility before authorizing support.
+              </p>
+              <Link href="/guide">Understand the support process →</Link>
+            </details>
+          </div>
+        </section>
         <section className="home-callout">
           <div>
             <p className="eyebrow">WHEN SUPPORT IS NEEDED</p>
