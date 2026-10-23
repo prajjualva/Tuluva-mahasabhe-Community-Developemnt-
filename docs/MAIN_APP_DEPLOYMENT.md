@@ -24,6 +24,19 @@ References: [Vercel cron authentication](https://vercel.com/docs/cron-jobs/manag
 
 ## Validation boundary
 
+### Isolated production PostgreSQL — 23 October 2026
+
+The owner approved provisioning only without paid upgrades. The authenticated Neon console confirmed **Free plan**, 1.14 CU-hours used and 37.38 MB project storage before provisioning. No plan, compute size, paid feature or billing setting was changed. Free quotas still apply; this does not promise unlimited free production operation or free external delivery/payment services.
+
+- Created a separate `tuluva_production` database on the existing project/compute. The existing `neondb` development database was not migrated, seeded or reset.
+- Applied all **24** existing migrations through a direct, non-pooled operational connection. The first migration invocation did not finish; after read-only inspection, the retry applied all migrations, and a subsequent deployment confirmed the completed state.
+- Created `tuluva_production_app` with application table CRUD, sequence usage/select and schema usage only. Verified no superuser, database creation, role creation, replication, RLS bypass or schema-object creation privileges. It has no access to Prisma's migration-history table. Future table/sequence grants apply only to objects created by the operational owner in this database.
+- Generated a unique random application password locally, without printing it. Private connection configuration is in Git-ignored `.env.production-operator`, restricted by Windows ACL to the current operator, SYSTEM and Administrators. This filename deliberately is **not** automatically loaded by Next.js, so local development and build verification do not silently target production. Do not upload this file, print its contents or put the migration-owner connection in the application's runtime environment.
+- The operator-only provisioning command is `node scripts/provision-production-database.mjs --approved-free-plan-provision`. It refuses existing resources unless an operator explicitly supplies `--resume-inspected-resources` after inspection; recovery validates saved connection targets and never overwrites passwords/configuration or deletes resources. This command cannot verify Neon billing from SQL: actual console-plan and owner approval checks are mandatory before use.
+- Verified **zero users and zero payments**. No development seed or synthetic financial records were created. The requested initial Admin email is `tuluworld@gmail.com`; the identity has **not** been bootstrapped yet and still requires secure password setup. No password should be sent through chat.
+
+Production Vercel database/secrets configuration, initial Admin bootstrap, external delivery configuration, live OIDC/private document validation and production acceptance remain pending. The existing operational database-owner credential was previously supplied through chat and must be rotated through Neon before public launch; coordinate the dependent development/operator connection updates rather than silently breaking them. The newly generated application credential was not shared through chat. No deployment or Git push was triggered by this provisioning step. Tests must continue to use disposable isolated databases, never this production database.
+
 ### Provisioned private bucket — 23 October 2026
 
 With the owner's explicit approval, the following empty S3 bucket was created through the AWS console:
