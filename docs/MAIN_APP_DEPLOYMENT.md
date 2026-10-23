@@ -24,6 +24,18 @@ References: [Vercel cron authentication](https://vercel.com/docs/cron-jobs/manag
 
 ## Validation boundary
 
+### Development parity — 23 October 2026
+
+At the owner's request, development was brought into alignment with the production database structure/runtime-privilege pattern, without copying production data or secrets:
+
+- Verified the existing development `neondb` already has all 24 migrations and an active `admin@dev.local` development identity. No reset, seed, record copy or new financial fixtures were necessary.
+- Created a distinct `tuluva_development_app` runtime login with a new random password and table CRUD/sequence usage/schema usage, but no migration-history access, superuser, database/role creation, replication, RLS bypass or schema-object creation rights. A live privilege check confirmed it **cannot connect to `tuluva_production`**.
+- Updated only the local `.env` database entries: runtime traffic uses the restricted pooled login; migration operations retain the direct owner connection. The original configuration is backed up in Git-ignored `.env.development-owner-backup`. Both files have Windows ACLs restricted to the operator, SYSTEM and Administrators. They must not be uploaded or shared. The production operator file was not changed.
+- The guarded operator command is `node scripts/configure-development-runtime.mjs --configure-existing-development-database`. It refuses production mode, unexpected database targets, existing roles and backup overwrites. Inspect retained state after any interrupted invocation; never blindly rerun or delete existing records to retry.
+- Restarted only the known workspace development server on `http://127.0.0.1:3000`. Private uploads remain local in development; production-only AWS federation/trust was not broadened. No additional cloud service, compute or paid plan was enabled.
+
+Both environments use the same source code. This does not replicate production infrastructure credentials, make localhost publicly accessible or claim live payment/email/SMS delivery. The existing password-reset UI uses verified email/SMS codes and remains dependent on a real delivery bridge; no OTP is exposed or bypassed for development.
+
 ### Isolated production PostgreSQL — 23 October 2026
 
 The owner approved provisioning only without paid upgrades. The authenticated Neon console confirmed **Free plan**, 1.14 CU-hours used and 37.38 MB project storage before provisioning. No plan, compute size, paid feature or billing setting was changed. Free quotas still apply; this does not promise unlimited free production operation or free external delivery/payment services.
