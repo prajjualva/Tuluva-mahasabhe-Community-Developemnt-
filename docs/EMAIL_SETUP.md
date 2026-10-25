@@ -4,13 +4,23 @@
 
 The owner's Resend account is authenticated. Its Settings/Usage page confirmed Transactional **Free**, 0/3,000 monthly emails, 0/100 daily emails and disabled paid overages. No subscription, add-on, paid feature or automatic DNS authorization was enabled.
 
-Added `notify.tuluworld.org.in` as a dedicated sending subdomain using Resend's displayed default Tokyo region. This does not modify the existing website, root-domain mail service or DNS. Receiving remains off. Manual DNS setup was selected rather than delegating DNS access to Resend. Domain verification, credentials and actual inbox delivery are still pending; adding a domain is not verification.
+Added `notify.tuluworld.org.in` as a dedicated sending subdomain using Resend's displayed default Tokyo region. This did not modify the existing website or root-domain mail service. Receiving remains off. Manual DNS setup was selected rather than delegating DNS access to Resend. The initial pending verification has since completed as recorded below; production credentials and a full live password-reset acceptance test remain pending.
 
 The GoDaddy sign-in page for `tuluworld.org.in` was opened for the owner. Sign in privately; never send passwords, API keys or verification codes through chat.
 
 The owner subsequently added the three records manually in their existing signed-in GoDaddy window. Direct authoritative queries to `ns40.domaincontrol.com` confirmed the DKIM value exactly matches Resend and both CNAME targets are correct. An initially missing `s` in `send.forge.rmta.net` was corrected before proceeding. Existing website/root mail records were not edited by the agent. Resend verification was then requested; DNS publication alone is not a provider-verification or inbox-delivery success claim.
 
-Resend subsequently recorded **DNS verified** at 5:04 PM IST, while the overall domain status remained **Pending / Verifying domain**. Its `send.notify` row was Verified; DKIM and `rsend.notify` were still Pending. A sending-key draft was inspected but cancelled without issuance because only All domains was available while verification was pending. No full-access or all-domains key was created. Wait for actual verified-domain availability before requesting approval to issue a domain-restricted development key. Live inbox delivery is not yet tested.
+Resend first recorded **DNS verified** at 5:04 PM IST, while the overall domain status remained **Pending / Verifying domain**. At that stage its `send.notify` row was Verified; DKIM and `rsend.notify` were still Pending. A sending-key draft was inspected but cancelled without issuance because only All domains was available while verification was pending. No full-access or all-domains key was created. Key issuance and delivery testing were deferred until the verified-domain state described below.
+
+### Verified domain and development connection
+
+- Resend subsequently confirmed **Domain verified** at 5:05 PM IST, with all three DNS rows Verified and sending enabled. Receiving remains off.
+- After explicit owner approval of the exact permissions and local destination, created `TuluWorld development verification email` with **Sending access**, restricted to **notify.tuluworld.org.in**. No full-access or all-domain key was created.
+- Captured the one-time key privately from its visible provider dialog and saved it only in the existing Git-ignored, ACL-restricted development `.env`. Selected `EMAIL_PROVIDER=resend` and `RESEND_FROM_EMAIL=no-reply@notify.tuluworld.org.in`. The secret was not printed, placed in source or committed. Production/operator configuration and Vercel were not changed. The development server was restarted to load this configuration.
+- Sent exactly one owner-approved connection-test email to `prajwalalva183@gmail.com`, using a fixed idempotency key to protect an uncertain repeat. It contained no OTP, credential, financial record or membership instruction. Resend accepted it and its Emails page subsequently reported **Delivered**. This proves provider-reported delivery to the recipient's mail system, not owner confirmation of inbox placement/read status.
+- All 243 unit/source tests and ESLint passed again after local configuration; the 15 isolated PostgreSQL tests remained intentionally skipped. No financial actions or production account changes were made. The previous complete type/format/Prisma/build checks remain source validation, not proof of the yet-unperformed live reset workflow.
+
+The owner should confirm inbox/spam receipt. A real, controlled application password-reset acceptance test and separate production sending-key configuration are still required before claiming full production email readiness. Development and production must not share this key.
 
 ## DNS records
 
