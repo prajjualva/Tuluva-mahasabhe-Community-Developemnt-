@@ -8,6 +8,10 @@ Added `notify.tuluworld.org.in` as a dedicated sending subdomain using Resend's 
 
 The GoDaddy sign-in page for `tuluworld.org.in` was opened for the owner. Sign in privately; never send passwords, API keys or verification codes through chat.
 
+The owner subsequently added the three records manually in their existing signed-in GoDaddy window. Direct authoritative queries to `ns40.domaincontrol.com` confirmed the DKIM value exactly matches Resend and both CNAME targets are correct. An initially missing `s` in `send.forge.rmta.net` was corrected before proceeding. Existing website/root mail records were not edited by the agent. Resend verification was then requested; DNS publication alone is not a provider-verification or inbox-delivery success claim.
+
+Resend subsequently recorded **DNS verified** at 5:04 PM IST, while the overall domain status remained **Pending / Verifying domain**. Its `send.notify` row was Verified; DKIM and `rsend.notify` were still Pending. A sending-key draft was inspected but cancelled without issuance because only All domains was available while verification was pending. No full-access or all-domains key was created. Wait for actual verified-domain availability before requesting approval to issue a domain-restricted development key. Live inbox delivery is not yet tested.
+
 ## DNS records
 
 Read the current Resend dashboard before publishing these records. These are the actual public verification records displayed for this account on 25 October, not generic examples. At GoDaddy, names below are relative to `tuluworld.org.in`; do not append the root domain twice.
