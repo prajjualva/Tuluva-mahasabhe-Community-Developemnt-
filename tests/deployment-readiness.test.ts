@@ -17,6 +17,37 @@ const configuration = () => ({
   SMS_TRANSPORT_TOKEN: "synthetic-token",
 });
 describe("deployment readiness configuration", () => {
+  it("accepts direct Resend email while retaining all SMS and other production requirements", () => {
+    const env = {
+      ...configuration(),
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "re_synthetic-private-token",
+      RESEND_FROM_EMAIL: "no-reply@notify.example.org",
+      EMAIL_TRANSPORT_URL: "",
+      EMAIL_TRANSPORT_TOKEN: "",
+    };
+    expect(deploymentReadiness(env).errors).toEqual([]);
+    expect(deploymentReadiness({ ...env, SMS_TRANSPORT_TOKEN: "" }).errors).toContain(
+      "SMS delivery requires a server-side transport token.",
+    );
+  });
+  it("blocks incomplete Resend and test-domain senders without exposing configuration", () => {
+    const env = {
+      ...configuration(),
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "private-provider-key",
+      RESEND_FROM_EMAIL: "onboarding@resend.dev",
+    };
+    const result = deploymentReadiness(env);
+    expect(result.errors).toContain(
+      "Email delivery configuration is invalid or missing a verified-domain sender.",
+    );
+    expect(JSON.stringify(result)).not.toContain(env.RESEND_API_KEY);
+    expect(deploymentReadiness({ ...env, RESEND_API_KEY: "" }).errors.length).toBeGreaterThan(0);
+    expect(
+      deploymentReadiness({ ...env, EMAIL_PROVIDER: "unsupported" }).errors.length,
+    ).toBeGreaterThan(0);
+  });
   it("allows complete non-payment configuration but explicitly warns online payments are disabled", () => {
     const result = deploymentReadiness(configuration());
     expect(result.errors).toEqual([]);

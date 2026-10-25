@@ -1,3 +1,5 @@
+import { otpDeliveryFor } from "../auth/otp-delivery";
+
 type Environment = Record<string, string | undefined>;
 
 /** Configuration-only checks; messages deliberately contain no supplied values. */
@@ -64,11 +66,19 @@ export function deploymentReadiness(env: Environment) {
     !/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(env.AWS_ROLE_ARN ?? "")
   )
     errors.push("Vercel private storage requires a valid AWS_ROLE_ARN workload role.");
-  for (const channel of ["EMAIL", "SMS"]) {
-    https(`${channel}_TRANSPORT_URL`);
-    if (!env[`${channel}_TRANSPORT_TOKEN`])
-      errors.push(`${channel} delivery requires a server-side transport token.`);
+  try {
+    if (!otpDeliveryFor("EMAIL", env))
+      errors.push("Email delivery requires a configured server-side provider.");
+    if (!env.EMAIL_PROVIDER || env.EMAIL_PROVIDER === "bridge") https("EMAIL_TRANSPORT_URL");
+    if (env.EMAIL_PROVIDER === "resend") {
+      // The gate is a production check even when invoked from a local shell.
+      otpDeliveryFor("EMAIL", { ...env, NODE_ENV: "production" });
+    }
+  } catch {
+    errors.push("Email delivery configuration is invalid or missing a verified-domain sender.");
   }
+  https("SMS_TRANSPORT_URL");
+  if (!env.SMS_TRANSPORT_TOKEN) errors.push("SMS delivery requires a server-side transport token.");
   if (!env.PAYMENT_PROVIDER)
     warnings.push("Online payments are disabled until a real gateway is configured.");
   else if (

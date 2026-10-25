@@ -18,6 +18,7 @@ let marker = "";
       marker = crypto.randomUUID();
       const captured: { code: string; destination: string }[] = [];
       vi.stubEnv("AUTH_SECRET", randomBytes(32).toString("hex"));
+      vi.stubEnv("EMAIL_PROVIDER", "bridge");
       vi.stubEnv("EMAIL_TRANSPORT_URL", "https://delivery.example.invalid/otp");
       vi.stubEnv("EMAIL_TRANSPORT_TOKEN", "synthetic-test-token");
       vi.stubGlobal(
