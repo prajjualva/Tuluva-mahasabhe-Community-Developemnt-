@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useState } from "react";
+import { VerificationResponseError, verificationFailureMessage } from "./verification-feedback";
 type Purpose =
   "LOGIN" | "PASSWORD_RESET" | "VERIFY_EMAIL" | "VERIFY_MOBILE" | "CHANGE_EMAIL" | "CHANGE_MOBILE";
 export function OtpWorkflow({ member = false }: { member?: boolean }) {
@@ -29,13 +30,14 @@ export function OtpWorkflow({ member = false }: { member?: boolean }) {
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Verification request failed");
+      if (!response.ok)
+        throw new VerificationResponseError(result.error ?? "Verification request failed");
       setChallenge(result.challengeExternalId);
       setMessage(
         "If these contact details match an eligible account, a verification code has been sent. It expires in 10 minutes.",
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not request a code");
+      setMessage(verificationFailureMessage(error, "request"));
     } finally {
       setBusy(false);
     }
@@ -56,14 +58,14 @@ export function OtpWorkflow({ member = false }: { member?: boolean }) {
         }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Verification failed");
+      if (!response.ok) throw new VerificationResponseError(result.error ?? "Verification failed");
       setChallenge("");
       setMessage("Verification completed.");
       if (purpose === "LOGIN") window.location.assign(result.redirectTo ?? "/member");
       else if (result.signInRequired) window.location.assign("/login");
       else window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Verification failed");
+      setMessage(verificationFailureMessage(error, "verify"));
     } finally {
       setBusy(false);
     }
