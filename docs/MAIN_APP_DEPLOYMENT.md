@@ -10,6 +10,8 @@
 
 ## External setup still required
 
+For a staged email-only pilot, set `EMAIL_ONLY_PILOT=1` in the Production environment and keep automatic domain assignment disabled. The gate still requires real email delivery. The app disables new SMS codes and rejects outstanding phone codes while the flag is enabled. Keep the staged deployment restricted to pilot testers and remove the flag once SMS is configured and tested for the standard release.
+
 1. Authenticate this computer's Git client with the owner's GitHub account. Do not paste personal access tokens or passwords into chat. Push the release branch and inspect GitHub CI before promotion.
 2. Per the owner's 23 October instruction, replace the existing `tuluva-mahasabhe` stakeholder-demo deployment with the main app, retaining `tuluva-mahasabhe.vercel.app`. Connect the validated release branch to that existing Vercel project. Keep the old successful deployment available for rollback and do not promote a replacement until the production configuration passes the gate. Do not point public production at the development database.
 3. The isolated production database, restricted runtime role, migrations and audited initial Admin are now provisioned as recorded below. Operational migrations use the direct/non-pooled `MIGRATION_DATABASE_URL`. Complete secure owner access and the remaining configuration before opening access. Never run the development seed in production.

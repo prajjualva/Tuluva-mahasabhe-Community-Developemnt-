@@ -18,6 +18,7 @@ let marker = "";
       marker = crypto.randomUUID();
       const captured: { code: string; destination: string }[] = [];
       vi.stubEnv("AUTH_SECRET", randomBytes(32).toString("hex"));
+      vi.stubEnv("EMAIL_ONLY_PILOT", "");
       vi.stubEnv("EMAIL_PROVIDER", "bridge");
       vi.stubEnv("EMAIL_TRANSPORT_URL", "https://delivery.example.invalid/otp");
       vi.stubEnv("EMAIL_TRANSPORT_TOKEN", "synthetic-test-token");
@@ -30,7 +31,11 @@ let marker = "";
       );
       const email = `auth-test-${marker}@example.invalid`;
       const user = await prisma.user.create({
-        data: { email, passwordHash: await hashPassword("SyntheticPassword123!") },
+        data: {
+          email,
+          mobile: `+919${(randomBytes(4).readUInt32BE() % 1e9).toString().padStart(9, "0")}`,
+          passwordHash: await hashPassword("SyntheticPassword123!"),
+        },
       });
       userId = user.id;
       const address = `auth-test-${marker}`;
@@ -123,6 +128,28 @@ let marker = "";
         requestPersistentOtp({ ...request, destination: newEmail }, address),
       ).rejects.toThrow("not configured");
       expect(await prisma.otpChallenge.count({ where: { userId: user.id } })).toBe(before);
+      vi.stubEnv("SMS_TRANSPORT_URL", "https://delivery.example.invalid/sms");
+      vi.stubEnv("SMS_TRANSPORT_TOKEN", "synthetic-sms-token");
+      const mobileRequest = { purpose: "VERIFY_MOBILE", channel: "SMS" };
+      const mobileChallenge = await requestPersistentOtp(mobileRequest, address, user.id);
+      vi.stubEnv("EMAIL_ONLY_PILOT", "1");
+      await expect(requestPersistentOtp(mobileRequest, address, user.id)).rejects.toThrow(
+        "not configured",
+      );
+      await expect(
+        verifyPersistentOtp(
+          {
+            purpose: "VERIFY_MOBILE",
+            challengeExternalId: mobileChallenge.challengeExternalId,
+            code: captured.at(-1)!.code,
+          },
+          address,
+          user.id,
+        ),
+      ).rejects.toThrow("invalid");
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).mobileVerifiedAt,
+      ).toBeNull();
       const key = privateRateLimitKey("auth-test-limit", marker);
       await consumeRateLimit(key, 1, 60000);
       await expect(consumeRateLimit(key, 1, 60000)).rejects.toThrow("Too many");
@@ -140,6 +167,7 @@ afterAll(async () => {
     privateRateLimitKey("otp-ip", `auth-test-${marker}`),
     privateRateLimitKey("otp-verify", `auth-test-${marker}`),
     privateRateLimitKey("otp-user", `CHANGE_EMAIL:${userId}`),
+    privateRateLimitKey("otp-user", `VERIFY_MOBILE:${userId}`),
     privateRateLimitKey("auth-test-limit", marker),
     privateRateLimitKey("otp-destination", `LOGIN:auth-test-${marker}@example.invalid`),
     privateRateLimitKey("otp-destination", `LOGIN:${user?.email}`),

@@ -10,11 +10,16 @@ export interface OtpDeliveryProvider {
   send(message: OtpDelivery): Promise<void>;
 }
 
+export function isEmailOnlyPilot(environment: Record<string, string | undefined> = process.env) {
+  return environment.EMAIL_ONLY_PILOT === "1";
+}
+
 /** Explicit providers fail closed: never fall back after a configured provider fails. */
 export function otpDeliveryFor(
   channel: "EMAIL" | "SMS",
   environment: Record<string, string | undefined> = process.env,
 ): OtpDeliveryProvider | null {
+  if (channel === "SMS" && isEmailOnlyPilot(environment)) return null;
   if (channel === "EMAIL" && environment.EMAIL_PROVIDER === "resend") {
     const key = environment.RESEND_API_KEY;
     const sender = z.string().email().safeParse(environment.RESEND_FROM_EMAIL);

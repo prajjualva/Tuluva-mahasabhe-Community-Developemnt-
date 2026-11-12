@@ -3,7 +3,13 @@ import { FormEvent, useState } from "react";
 import { VerificationResponseError, verificationFailureMessage } from "./verification-feedback";
 type Purpose =
   "LOGIN" | "PASSWORD_RESET" | "VERIFY_EMAIL" | "VERIFY_MOBILE" | "CHANGE_EMAIL" | "CHANGE_MOBILE";
-export function OtpWorkflow({ member = false }: { member?: boolean }) {
+export function OtpWorkflow({
+  member = false,
+  emailOnly = false,
+}: {
+  member?: boolean;
+  emailOnly?: boolean;
+}) {
   const [purpose, setPurpose] = useState<Purpose>(member ? "VERIFY_EMAIL" : "LOGIN");
   const [channel, setChannel] = useState("EMAIL");
   const [challenge, setChallenge] = useState("");
@@ -75,6 +81,9 @@ export function OtpWorkflow({ member = false }: { member?: boolean }) {
       <h2>
         {member ? "Contact verification and changes" : "Sign in with a code / reset password"}
       </h2>
+      {member && emailOnly && (
+        <p>Phone verification and phone-number changes are unavailable during the pilot.</p>
+      )}
       <p role="status">{message}</p>
       <form onSubmit={requestCode}>
         <fieldset disabled={busy}>
@@ -90,9 +99,9 @@ export function OtpWorkflow({ member = false }: { member?: boolean }) {
               {member ? (
                 <>
                   <option value="VERIFY_EMAIL">Verify my email</option>
-                  <option value="VERIFY_MOBILE">Verify my mobile</option>
+                  {!emailOnly && <option value="VERIFY_MOBILE">Verify my mobile</option>}
                   <option value="CHANGE_EMAIL">Change email</option>
-                  <option value="CHANGE_MOBILE">Change mobile</option>
+                  {!emailOnly && <option value="CHANGE_MOBILE">Change mobile</option>}
                 </>
               ) : (
                 <>
@@ -102,7 +111,7 @@ export function OtpWorkflow({ member = false }: { member?: boolean }) {
               )}
             </select>
           </label>
-          {!member && (
+          {!member && !emailOnly && (
             <label>
               Send code by
               <select value={channel} onChange={(event) => setChannel(event.target.value)}>

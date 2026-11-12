@@ -1,4 +1,4 @@
-import { otpDeliveryFor } from "../auth/otp-delivery";
+import { isEmailOnlyPilot, otpDeliveryFor } from "../auth/otp-delivery";
 
 type Environment = Record<string, string | undefined>;
 
@@ -77,8 +77,15 @@ export function deploymentReadiness(env: Environment) {
   } catch {
     errors.push("Email delivery configuration is invalid or missing a verified-domain sender.");
   }
-  https("SMS_TRANSPORT_URL");
-  if (!env.SMS_TRANSPORT_TOKEN) errors.push("SMS delivery requires a server-side transport token.");
+  if (isEmailOnlyPilot(env)) {
+    warnings.push(
+      "Phone verification and phone-number changes are disabled for the email-only pilot.",
+    );
+  } else {
+    https("SMS_TRANSPORT_URL");
+    if (!env.SMS_TRANSPORT_TOKEN)
+      errors.push("SMS delivery requires a server-side transport token.");
+  }
   if (!env.PAYMENT_PROVIDER)
     warnings.push("Online payments are disabled until a real gateway is configured.");
   else if (

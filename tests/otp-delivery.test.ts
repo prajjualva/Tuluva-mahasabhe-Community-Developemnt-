@@ -15,6 +15,16 @@ const message = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("verification delivery providers", () => {
+  it("disables configured SMS delivery during the pilot while retaining email delivery", () => {
+    const environment = {
+      ...settings,
+      EMAIL_ONLY_PILOT: "1",
+      SMS_TRANSPORT_URL: "https://delivery.example.org/sms",
+      SMS_TRANSPORT_TOKEN: "synthetic-sms-token",
+    };
+    expect(otpDeliveryFor("SMS", environment)).toBeNull();
+    expect(otpDeliveryFor("EMAIL", environment)).not.toBeNull();
+  });
   it("keeps missing delivery disabled instead of faking success", () => {
     expect(otpDeliveryFor("EMAIL", {})).toBeNull();
     expect(otpDeliveryFor("SMS", settings)).toBeNull();

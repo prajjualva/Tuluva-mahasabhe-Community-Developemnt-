@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword } from "./password";
 import { OTP_EXPIRY_MS, OTP_MAX_ATTEMPTS, OTP_MAX_REQUESTS_PER_HOUR } from "./otp-service";
 import { consumeRateLimit, privateRateLimitKey } from "../security/rate-limit";
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
-import { otpDeliveryFor } from "./otp-delivery";
+import { isEmailOnlyPilot, otpDeliveryFor } from "./otp-delivery";
 import { createInAppNotificationInTransaction } from "../notifications/notification-service";
 
 export const otpPurposeSchema = z.enum([
@@ -173,6 +173,10 @@ export async function verifyPersistentOtp(input: unknown, address: string, actor
       !challenge.user ||
       challenge.user.status !== "ACTIVE" ||
       challenge.purpose !== command.purpose ||
+      (isEmailOnlyPilot() &&
+        (command.purpose.endsWith("MOBILE") ||
+          (isPublicOtpPurpose(command.purpose) &&
+            challenge.destination !== challenge.user.email))) ||
       (!isPublicOtpPurpose(command.purpose) && challenge.userId !== actorId) ||
       challenge.consumedAt ||
       challenge.expiresAt <= now ||

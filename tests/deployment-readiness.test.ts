@@ -17,6 +17,22 @@ const configuration = () => ({
   SMS_TRANSPORT_TOKEN: "synthetic-token",
 });
 describe("deployment readiness configuration", () => {
+  it("accepts an explicit email-only pilot without SMS and still requires email delivery", () => {
+    const env = {
+      ...configuration(),
+      EMAIL_ONLY_PILOT: "1",
+      SMS_TRANSPORT_URL: "",
+      SMS_TRANSPORT_TOKEN: "",
+    };
+    const result = deploymentReadiness(env);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toContain(
+      "Phone verification and phone-number changes are disabled for the email-only pilot.",
+    );
+    expect(deploymentReadiness({ ...env, EMAIL_TRANSPORT_TOKEN: "" }).errors).toContain(
+      "Email delivery requires a configured server-side provider.",
+    );
+  });
   it("accepts direct Resend email while retaining all SMS and other production requirements", () => {
     const env = {
       ...configuration(),
