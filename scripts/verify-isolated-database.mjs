@@ -152,6 +152,7 @@ try {
           ? [
               "tests/auth-db.integration.test.ts",
               "tests/password-reset-db.integration.test.ts",
+              "tests/initial-admin-access-db.integration.test.ts",
               "tests/otp-delivery.test.ts",
             ]
           : []),

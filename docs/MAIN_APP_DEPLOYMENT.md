@@ -30,10 +30,15 @@ After the owner confirmed the identity, preflight verified `tuluva_production` h
 
 - Read-back confirmed exactly one active `tuluworld@gmail.com` identity, one active ADMIN assignment and one `INITIAL_ADMIN_BOOTSTRAPPED` audit under `SYSTEM_BOOTSTRAP` with the owner's setup reason.
 - Bootstrap initialized only missing permissions/roles and versioned scheme defaults within its serializable transaction. No development seed or financial fixture was used. Verified zero development identities, zero member profiles and zero payments afterward.
-- A cryptographically random initial password was generated only in process memory, passed privately to the bootstrap child and discarded on exit. It was not printed, saved in a handoff file, reused from development or supplied through chat. The database stores only its hash; no shared temporary password was created.
-- The owner must choose an owner-known password through verified email reset after separate production email credentials and the deployed application are configured. Account creation does not mean public Admin login is ready. The completed live reset test was on a disposable database, not this identity.
+- At bootstrap, a cryptographically random password was generated in process memory, passed privately to the bootstrap child and discarded on exit. The database stores only its hash. The completed live reset test used a disposable database.
 
 Development accounts/email, Vercel and the public deployment were not changed. Production email/job/authentication/encryption configuration, secure key backup, rotation of the previously shared operational-owner credential, live S3 federation and remaining release acceptance are still required. No paid plan, gateway, production email key or deployment was enabled.
+
+### Initial production Admin password handoff
+
+- At the owner's request, one temporary password was issued for `tuluworld@gmail.com` using the restricted production application connection. The transaction checked the original bootstrap audit and absence of prior sign-in or issuance, updated the hash, consumed any outstanding codes and appended one `INITIAL_ADMIN_TEMPORARY_PASSWORD_ISSUED` audit.
+- Read-back verified the password matched the stored hash, the Admin assignment remained active and there were zero sessions, pending codes, development identities, members and payments. The password is in the Git-ignored local `.env.admin-access` file with restricted Windows permissions. View it locally only. Replace it using verified password reset after production deployment and email configuration.
+- The operator command is `node --import tsx scripts/issue-production-admin-access.ts --owner-approved-initial-access`. It refuses to overwrite a handoff and has no public API. Use the verified password reset flow after this one-time issuance.
 
 ### Development parity — 23 October 2026
 
@@ -58,7 +63,7 @@ The owner approved provisioning only without paid upgrades. The authenticated Ne
 - The operator-only provisioning command is `node scripts/provision-production-database.mjs --approved-free-plan-provision`. It refuses existing resources unless an operator explicitly supplies `--resume-inspected-resources` after inspection; recovery validates saved connection targets and never overwrites passwords/configuration or deletes resources. This command cannot verify Neon billing from SQL: actual console-plan and owner approval checks are mandatory before use.
 - At provisioning, verified **zero users and zero payments**, without development seed or financial fixtures. The requested Admin email was `tuluworld@gmail.com`; its later creation and remaining secure-access setup are recorded in the 26 October section above. No password should be sent through chat.
 
-Production Vercel database/secrets configuration, owner-known Admin password setup, external delivery configuration, live OIDC/private document validation and production acceptance remain pending. The existing operational database-owner credential was previously supplied through chat and must be rotated through Neon before public launch; coordinate the dependent development/operator connection updates rather than silently breaking them. The newly generated application credential was not shared through chat. No deployment or Git push was triggered by this provisioning step. Tests must continue to use disposable isolated databases, never this production database.
+Production Vercel database/secrets configuration, external delivery configuration, live OIDC/private document validation and production acceptance remain pending. The existing operational database-owner credential was previously supplied through chat and must be rotated through Neon before public launch; coordinate the dependent development/operator connection updates rather than silently breaking them. The newly generated application credential was not shared through chat. No deployment or Git push was triggered by this provisioning step. Tests must continue to use disposable isolated databases, never this production database.
 
 ### Provisioned private bucket — 23 October 2026
 
