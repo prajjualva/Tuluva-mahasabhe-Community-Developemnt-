@@ -7,6 +7,7 @@ on:
       - android/**
       - public/manifest.webmanifest
       - public/brand/app-icon-*.png
+      - src/app/.well-known/assetlinks.json/**
       - .github/workflows/android.yml
 
 permissions:
@@ -30,7 +31,12 @@ jobs:
         working-directory: android
       - run: npm run generate
         working-directory: android
-      - run: sdkmanager "platforms;android-36"
+      - name: Install Android SDK 36 if needed
+        run: |
+          if [ ! -f "$ANDROID_HOME/platforms/android-36/android.jar" ]; then
+            JAVA_HOME="$JAVA_HOME_21_X64" PATH="$JAVA_HOME_21_X64/bin:$PATH" \
+              "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36"
+          fi
       - run: bash gradlew --no-daemon :app:bundleRelease
         working-directory: android/generated
       - uses: actions/upload-artifact@v4
