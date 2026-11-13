@@ -3,6 +3,9 @@ node_modules/
 .next/
 .next-validation/
 .stakeholder-export/
+android/generated/
+*.jks
+*.keystore
 coverage/
 .env
 .env.local

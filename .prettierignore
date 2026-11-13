@@ -8,3 +8,4 @@ uploads-ci/
 *.tsbuildinfo
 prisma/generated/
 .stakeholder-export/
+android/generated/

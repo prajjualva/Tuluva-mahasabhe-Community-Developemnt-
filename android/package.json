@@ -1,0 +1,10 @@
+{
+  "name": "tuluworld-android-build",
+  "private": true,
+  "scripts": {
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "@bubblewrap/core": "1.27.0"
+  }
+}

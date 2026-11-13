@@ -1,0 +1,40 @@
+name: Android bundle
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/android-release]
+    paths:
+      - android/**
+      - public/manifest.webmanifest
+      - public/brand/app-icon-*.png
+      - .github/workflows/android.yml
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: android/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci --ignore-scripts
+        working-directory: android
+      - run: npm run generate
+        working-directory: android
+      - run: sdkmanager "platforms;android-36"
+      - run: bash gradlew --no-daemon :app:bundleRelease
+        working-directory: android/generated
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tuluworld-android-unsigned
+          path: android/generated/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
