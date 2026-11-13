@@ -1,6 +1,6 @@
 # TuluWorld on Google Play
 
-The Android app opens the Community Support portal through a Trusted Web Activity. The proposed Google Play package ID is `org.tuluworld.communitysupport`. Confirm the ID and the permanent HTTPS hostname in `app.json` before creating the first Play listing.
+The Android app opens the Community Support portal through a Trusted Web Activity on Android 7.0 and later. The proposed Google Play package ID is `org.tuluworld.communitysupport`. Confirm the ID and the permanent HTTPS hostname in `app.json` before creating the first Play listing.
 
 ## Build and test
 

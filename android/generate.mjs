@@ -37,6 +37,7 @@ const androidManifest = new TwaManifest({
   maskableIconUrl: `${assetOrigin}/app-icon-maskable-512.png`,
   fallbackType: "customtabs",
   enableNotifications: false,
+  minSdkVersion: 24,
   splashScreenFadeOutDuration: 300,
   appVersion: "1.0.0",
   appVersionCode: 1,
