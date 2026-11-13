@@ -1,4 +1,4 @@
-import { packageId } from "../../../../android/app.json";
+import androidApp from "../../../../android/app.json";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export function GET() {
       relation: ["delegate_permission/common.handle_all_urls"],
       target: {
         namespace: "android_app",
-        package_name: packageId,
+        package_name: androidApp.packageId,
         sha256_cert_fingerprints: [fingerprint],
       },
     },
