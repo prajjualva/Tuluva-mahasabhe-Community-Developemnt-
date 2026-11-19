@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
+import { describe, expect, it, vi } from "vitest";
+import { POST as postWebhook } from "../src/app/api/payments/webhooks/[provider]/route";
 import {
   getPaymentProvider,
   PaymentProviderRequestError,
@@ -16,6 +18,31 @@ const environment = {
 };
 
 describe("online payment-provider boundary", () => {
+  it("allows the webhook to verify signatures before checkout is enabled", async () => {
+    try {
+      for (const [key, value] of Object.entries(environment)) vi.stubEnv(key, value);
+      vi.stubEnv("PAYMENT_PROVIDER", undefined);
+      expect(getPaymentProvider().available).toBe(false);
+      const body = "{";
+      const makeRequest = (headers: Record<string, string>) =>
+        new NextRequest("http://localhost/api/payments/webhooks/razorpay", {
+          method: "POST",
+          body,
+          headers,
+        });
+      const context = { params: Promise.resolve({ provider: "razorpay" }) };
+      expect((await postWebhook(makeRequest({}), context)).status).toBe(401);
+      const signature = createHmac("sha256", environment.RAZORPAY_WEBHOOK_SECRET)
+        .update(body)
+        .digest("hex");
+      expect(
+        (await postWebhook(makeRequest({ "x-razorpay-signature": signature }), context)).status,
+      ).toBe(400);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("keeps online payments disabled unless a supported provider has every credential", () => {
     expect(getPaymentProvider({}).available).toBe(false);
     expect(getPaymentProvider({ PAYMENT_PROVIDER: "stripe" })).toEqual({
@@ -174,7 +201,6 @@ describe("online payment-provider boundary", () => {
       kind: "PAYMENT",
       providerEventId: "payment.captured:pay_real_gateway_123",
       type: "PAYMENT_SUCCEEDED",
-      paymentExternalId,
       providerOrderId: "order_real_gateway_123",
       providerReference: "pay_real_gateway_123",
       amountPaise: 36900,
@@ -187,6 +213,18 @@ describe("online payment-provider boundary", () => {
     expect(JSON.stringify(provider.verifyWebhook(rawBody, signature).payload)).not.toMatch(
       /secret-never-persist|card|last4/,
     );
+    for (const notes of [[], undefined]) {
+      const event = JSON.parse(rawBody);
+      event.payload.payment.entity.notes = notes;
+      const body = JSON.stringify(event);
+      const signed = createHmac("sha256", environment.RAZORPAY_WEBHOOK_SECRET)
+        .update(body)
+        .digest("hex");
+      expect(provider.verifyWebhook(body, signed)).toMatchObject({
+        providerOrderId: "order_real_gateway_123",
+        type: "PAYMENT_SUCCEEDED",
+      });
+    }
     for (const replacement of [{ amount: 1.25 }, { amount: -100 }, { currency: "USD" }]) {
       const invalid = JSON.parse(rawBody);
       Object.assign(invalid.payload.payment.entity, replacement);

@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ProfilePhoto } from "./profile/profile-photo";
 type Profile = {
   externalId: string;
   fullName: string;
   address: string;
   status: string;
+  photoUpdatedAt: string | null;
   user: {
     email: string;
     mobile: string;
@@ -13,7 +15,6 @@ type Profile = {
     mobileVerifiedAt: string | null;
   };
   coordinator: { member: { fullName: string }; referralCode: string } | null;
-  nominees: { kind: string; fullName: string; status: string }[];
 };
 type Coordinator = { externalId: string; member: { fullName: string }; referralCode: string };
 export function MemberProfile({
@@ -76,29 +77,26 @@ export function MemberProfile({
     }
   };
   return (
-    <article>
-      <h2>
-        {summary
-          ? (profile?.fullName ?? "My membership")
-          : coordinatorOnly
-            ? "My Coordinator"
-            : "My profile"}
-      </h2>
-      <p role="status">{message}</p>
+    <article className={summary ? "member-identity" : undefined}>
+      {summary ? (
+        <div className="member-identity-heading">
+          <h2>{profile?.fullName ?? "My membership"}</h2>
+          {profile && <span className="access-pill">{profile.status.toLowerCase()}</span>}
+        </div>
+      ) : (
+        <h2>{coordinatorOnly ? "Assignment" : "Personal details"}</h2>
+      )}
+      {message && <p role="status">{message}</p>}
       {profile ? (
         <>
-          <p>
-            Member reference: {profile.externalId} · {profile.status}
-          </p>
-          <p>
-            Coordinator: {profile.coordinator?.member.fullName ?? "Foundation Admin"}
-            {profile.coordinator ? ` · ${profile.coordinator.referralCode}` : ""}
-          </p>
+          {!summary && (
+            <p>Coordinator: {profile.coordinator?.member.fullName ?? "Foundation Admin"}</p>
+          )}
           {summary ? (
             <>
-              <p>Verified current nominees: {profile.nominees.length}</p>
-              <Link href="/member/profile">My profile and verification</Link> ·{" "}
-              <Link href="/member/nominee">Manage nominees</Link>
+              <Link href={profile.photoUpdatedAt ? "/member/id-card" : "/member/profile"}>
+                {profile.photoUpdatedAt ? "View member ID card →" : "Add a profile photo →"}
+              </Link>
             </>
           ) : coordinatorOnly ? (
             <form onSubmit={(event) => void save(event, true)}>
@@ -121,6 +119,16 @@ export function MemberProfile({
             </form>
           ) : (
             <>
+              <ProfilePhoto
+                fullName={profile.fullName}
+                photoUpdatedAt={profile.photoUpdatedAt}
+                onPhotoChanged={(photoUpdatedAt) =>
+                  setProfile((current) => current && { ...current, photoUpdatedAt })
+                }
+              />
+              <p className="profile-member-reference">
+                Member ID <span>{profile.externalId}</span>
+              </p>
               <p>
                 Email: {profile.user.email} ·{" "}
                 {profile.user.emailVerifiedAt ? "Verified" : "Verification pending"}

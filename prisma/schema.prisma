@@ -198,8 +198,30 @@ model User {
   comments         Comment[]
   newsComments     NewsComment[]
   notifications    Notification[]
+  deletionRequest  AccountDeletionRequest?
 
   @@map("users")
+}
+
+enum AccountDeletionRequestStatus {
+  PENDING
+  IN_REVIEW
+  CANCELLED
+}
+
+model AccountDeletionRequest {
+  externalId    String                       @id @default(uuid()) @db.Uuid
+  userId        String                       @unique @db.Uuid
+  status        AccountDeletionRequestStatus @default(PENDING)
+  requestedAt   DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  memberMessage String?
+  reviewedById  String?                      @db.Uuid
+  reviewedAt    DateTime?
+  user          User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status, requestedAt])
+  @@map("account_deletion_requests")
 }
 
 model AuthSession {
@@ -322,10 +344,20 @@ model Member {
   transfers               CoordinatorTransfer[]
   deathCases              DeathCase[]            @relation("SubjectMember")
   referral                Referral?
+  profilePhoto            MemberProfilePhoto?
 
   @@index([status])
   @@index([coordinatorId])
   @@map("members")
+}
+
+model MemberProfilePhoto {
+  memberId  String   @id @db.Uuid
+  bytes     Bytes
+  updatedAt DateTime @updatedAt
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("member_profile_photos")
 }
 
 model Coordinator {
@@ -943,26 +975,45 @@ model CashDiscrepancy {
 }
 
 model Notification {
-  id                String    @id @default(uuid()) @db.Uuid
-  externalId        String    @unique @default(uuid()) @db.Uuid
-  userId            String    @db.Uuid
-  channel           String    @default("IN_APP")
-  type              String    @default("SYSTEM")
-  title             String    @default("Community Support Foundation")
-  body              String    @default("")
+  id                String                 @id @default(uuid()) @db.Uuid
+  externalId        String                 @unique @default(uuid()) @db.Uuid
+  userId            String                 @db.Uuid
+  channel           String                 @default("IN_APP")
+  type              String                 @default("SYSTEM")
+  title             String                 @default("Community Support Foundation")
+  body              String                 @default("")
   template          String
   // Payload is server-only metadata. Safe notification DTOs never serialize it.
   payload           Json
   relatedExternalId String?
-  idempotencyKey    String?   @unique
+  idempotencyKey    String?                @unique
   sentAt            DateTime?
   readAt            DateTime?
-  createdAt         DateTime  @default(now())
-  user              User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt         DateTime               @default(now())
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries        NotificationDelivery[]
 
   @@index([userId, readAt, createdAt])
   @@index([userId, type, createdAt])
   @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notificationId String       @db.Uuid
+  channel        String
+  state          String       @default("PENDING")
+  availableAt    DateTime     @default(now())
+  firstAttemptAt DateTime?
+  attempts       Int          @default(0)
+  claimToken     String?      @db.Uuid
+  recipientHash  String?
+  acceptedAt     DateTime?
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel])
+  @@index([channel, state, availableAt])
+  @@map("notification_deliveries")
 }
 
 model CommunityNews {

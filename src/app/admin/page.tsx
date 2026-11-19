@@ -15,6 +15,7 @@ import { requirePagePermission } from "../../server/http/page-authorize";
 import { DueWaivers } from "../components/due-waivers";
 import { OperationsShell } from "../components/operations-shell";
 import { AdminUserManagement } from "./user-management";
+import { AccountDeletionQueue } from "./account-deletion-queue";
 export default async function AdminDashboard() {
   await requirePagePermission("admin:*", "/admin");
   return (
@@ -122,6 +123,13 @@ export default async function AdminDashboard() {
           description:
             "Search accountable actions by actor, event, reason, timestamp and request reference.",
           content: <AdminAuditFeed />,
+        },
+        {
+          id: "privacy",
+          label: "Account deletion",
+          description:
+            "Review account deletion requests and communicate identity or retention requirements.",
+          content: <AccountDeletionQueue />,
         },
       ]}
     />

@@ -4,6 +4,18 @@ import { requirePermission } from "../auth/authorization";
 import { prisma } from "../database/prisma";
 
 export async function requirePermissionForAccessToken(token: string, permission: string) {
+  const principal = await readActiveAccessPrincipal(token);
+  if (
+    principal.memberUnavailable &&
+    !principal.permissions.has("admin:*") &&
+    permission !== "member:cash:remit"
+  )
+    throw new Error("Membership access is closed; contact Foundation Admin");
+  requirePermission(principal, permission);
+  return principal;
+}
+
+export async function readActiveAccessPrincipal(token: string) {
   const tokenPrincipal = await verifyAccessToken(token);
   await assertSessionActive(token, tokenPrincipal.userId);
   // Permissions are read from the database for every request so revoked roles and
@@ -33,20 +45,13 @@ export async function requirePermissionForAccessToken(token: string, permission:
     ),
   );
   const coordinator = user.member?.coordinatorProfile;
-  if (
-    user.member &&
-    ["CLOSED", "DECEASED"].includes(user.member.status) &&
-    !permissions.has("admin:*") &&
-    permission !== "member:cash:remit"
-  )
-    throw new Error("Membership access is closed; contact Foundation Admin");
-  const principal = {
+  return {
     userId: tokenPrincipal.userId,
     permissions,
     coordinatorSuspended: coordinator?.isSuspended || coordinator?.status === "SUSPENDED",
+    coordinatorActive: coordinator?.status === "ACTIVE" && !coordinator.isSuspended,
+    memberUnavailable: !!user.member && ["CLOSED", "DECEASED"].includes(user.member.status),
   };
-  requirePermission(principal, permission);
-  return principal;
 }
 
 export async function requireApiPermission(request: NextRequest, permission: string) {

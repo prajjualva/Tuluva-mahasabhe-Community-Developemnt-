@@ -69,6 +69,7 @@ export async function createCoordinatorProfile(actorId: string, input: unknown) 
       type: "SYSTEM",
       title: "Coordinator appointment",
       body: "The Foundation appointed you as a Coordinator. Your referral code and assigned services are available in the Coordinator console.",
+      template: "COORDINATOR_APPOINTMENT",
       relatedExternalId: coordinator.externalId,
       idempotencyKey: `coordinator-appointment:${coordinator.id}`,
     });

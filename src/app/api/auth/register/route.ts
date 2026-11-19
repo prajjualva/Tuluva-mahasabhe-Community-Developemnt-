@@ -11,6 +11,7 @@ import {
 import { registerMemberPersistently } from "../../../../server/members/registration-service";
 import { consumeRateLimit, privateRateLimitKey } from "../../../../server/security/rate-limit";
 import { ZodError } from "zod";
+import { scheduleNotificationDelivery } from "../../../../server/notifications/notification-delivery-service";
 
 export async function POST(request: NextRequest) {
   const key = registrationThrottleKey(clientAddress(request.headers));
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
     await assertLoginAllowed(key);
     const member = await registerMemberPersistently(await request.json());
     await clearLoginFailures(key);
+    scheduleNotificationDelivery({ relatedExternalId: member.memberExternalId, limit: 4 });
     return NextResponse.json(member, { status: 201 });
   } catch (error) {
     if (error instanceof ThrottleError)

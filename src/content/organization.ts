@@ -1,3 +1,10 @@
+export const applicationBrand = {
+  name: "Tuluva Mahasabhe",
+  fullName: "Tuluva Mahasabhe community development program of Tuluworld Foundation",
+  description: "Community development program of Tuluworld Foundation",
+  logo: "/brand/tuluva-mahasabhe-logo.jpeg",
+} as const;
+
 /** Public organisation copy adapted from Tuluworld's official website, reviewed 21 October 2026. */
 export const organization = {
   name: "TuluWorld Foundation",

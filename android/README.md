@@ -6,7 +6,7 @@ The Android app opens the Community Support portal through a Trusted Web Activit
 
 1. Run the Android bundle workflow on the release branch. It builds an unsigned Android App Bundle targeting API 36. To reproduce locally, use Node 24, JDK 17 and the Android 36 SDK. Run `npm ci` and `npm run generate` from this directory, then run `gradlew.bat :app:bundleRelease` on Windows or `bash gradlew :app:bundleRelease` on Linux from `generated/`.
 2. Sign the bundle with the organization's upload key and use Play App Signing. Keep the keystore, passwords and recovery copies in protected organization storage. The CI artifact is unsigned.
-3. After Google issues the Play App Signing certificate, set its public SHA-256 fingerprint as `ANDROID_PLAY_SIGNING_SHA256` on the production portal. Deploy and verify that `/.well-known/assetlinks.json` returns the package ID and the Play certificate fingerprint. Test the bundle installed from the internal testing track on an Android device.
+3. Set `ANDROID_PLAY_SIGNING_SHA256` on the production portal to the public SHA-256 fingerprints under **App signing key** in Play Console. Separate multiple fingerprints with commas. Deploy and verify that `/.well-known/assetlinks.json` returns the package ID and all configured fingerprints. Test the bundle installed from the internal testing track on an Android device.
 
 ## Before submitting for public review
 

@@ -1,12 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { filterGuide, guideAudiences, GuideAudience } from "../../content/platform-guide";
+import { searchGuideEntries, type GuideEntry } from "../../content/platform-guide";
 
-export function GuideExplorer() {
+export function GuideExplorer({ guides }: { guides: GuideEntry[] }) {
   const [query, setQuery] = useState("");
-  const [audience, setAudience] = useState<GuideAudience>("Everyone");
-  const entries = filterGuide(query, audience);
+  const entries = searchGuideEntries(guides, query);
   const topics = [...new Set(entries.map((entry) => entry.topic))];
   return (
     <section className="guide-explorer" aria-labelledby="guide-search-heading">
@@ -22,18 +21,6 @@ export function GuideExplorer() {
           onChange={(event) => setQuery(event.target.value)}
           aria-controls="guide-results"
         />
-        <div className="guide-filters" role="group" aria-label="Guide audience">
-          {guideAudiences.map((role) => (
-            <button
-              key={role}
-              type="button"
-              aria-pressed={audience === role}
-              onClick={() => setAudience(role)}
-            >
-              {role === "Everyone" ? "All guides" : role}
-            </button>
-          ))}
-        </div>
         <p className="muted" role="status">
           {entries.length} {entries.length === 1 ? "guide" : "guides"} found
         </p>
@@ -42,15 +29,9 @@ export function GuideExplorer() {
         {entries.length === 0 ? (
           <div className="guide-empty">
             <h3>No matching guides</h3>
-            <p>Try another word or show all roles.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setAudience("Everyone");
-              }}
-            >
-              Clear filters
+            <p>Try another word or clear your search.</p>
+            <button type="button" onClick={() => setQuery("")}>
+              Clear search
             </button>
           </div>
         ) : (

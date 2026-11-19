@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { SignOutButton } from "../member/sign-out-button";
 import { OrganizationBrand } from "./organization-brand";
+import { PrivacyLinks } from "./privacy-links";
 type Panel = { id: string; label: string; description: string; content: ReactNode };
 export function OperationsShell({
   role,
@@ -36,7 +37,7 @@ export function OperationsShell({
   return (
     <div className="shell operations-shell">
       <aside className="portal-sidebar">
-        <OrganizationBrand />
+        <OrganizationBrand href={role === "Admin" ? "/admin" : "/coordinator"} />
         <p className="portal-role">{role} workspace</p>
         <button
           className="mobile-nav-toggle"
@@ -67,15 +68,19 @@ export function OperationsShell({
           ))}
         </nav>
         <div className="sidebar-footer">
-          <Link href="/guide">Platform guide</Link>
+          <Link href={role === "Admin" ? "/guide?workspace=admin" : "/guide?workspace=coordinator"}>
+            Platform guide
+          </Link>
           {role === "Coordinator" && <Link href="/member">My member portal</Link>}
+          {role === "Coordinator" && <Link href="/member/id-card">My member ID card</Link>}
           <Link href="/death-support-events">Public support events</Link>
+          <PrivacyLinks />
           <SignOutButton />
         </div>
       </aside>
       <section className="workspace">
         <header className="workspace-topbar">
-          <span>TuluWorld Foundation · Community Support</span>
+          <span>Tuluva Mahasabhe · Tuluworld Foundation</span>
           <span className="access-pill">{role} access</span>
         </header>
         <main id={selected.id} aria-labelledby="operations-heading">

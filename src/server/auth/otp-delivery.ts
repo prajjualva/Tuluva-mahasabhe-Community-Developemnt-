@@ -54,11 +54,11 @@ export function otpDeliveryFor(
             method: "POST",
             headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
             body: JSON.stringify({
-              from: `TuluWorld Foundation <${sender.data}>`,
+              from: `Tuluva Mahasabhe <${sender.data}>`,
               to: [input.destination],
-              subject: "Your TuluWorld Foundation verification code",
+              subject: "Your Tuluva Mahasabhe verification code",
               text: [
-                "TuluWorld Foundation",
+                "Tuluva Mahasabhe · Tuluworld Foundation",
                 "",
                 `Your verification code is: ${input.code}`,
                 `It expires in ${Math.ceil(input.expiresInSeconds / 60)} minutes.`,

@@ -16,5 +16,5 @@ export default async function MemberSection({ params }: { params: Promise<{ sect
   )
     notFound();
   await requirePagePermission("member:profile:read", `/member/${section}`);
-  return <MemberPortal section={section} />;
+  return <MemberPortal key={section} section={section} />;
 }

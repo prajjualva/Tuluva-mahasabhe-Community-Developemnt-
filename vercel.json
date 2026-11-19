@@ -7,6 +7,7 @@
     { "path": "/api/internal/jobs/membership-dues", "schedule": "0 0 * * *" },
     { "path": "/api/internal/jobs/plan-reminders", "schedule": "10 1 * * *" },
     { "path": "/api/internal/jobs/due-reminders", "schedule": "20 2 * * *" },
-    { "path": "/api/internal/jobs/cash-reconciliation", "schedule": "30 3 * * *" }
+    { "path": "/api/internal/jobs/cash-reconciliation", "schedule": "30 3 * * *" },
+    { "path": "/api/internal/jobs/notification-delivery", "schedule": "0 5 * * *" }
   ]
 }

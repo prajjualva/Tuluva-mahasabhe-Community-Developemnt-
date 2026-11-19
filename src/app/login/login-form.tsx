@@ -29,7 +29,7 @@ export default function LoginForm({ emailOnly }: { emailOnly: boolean }) {
       const data = await result.json();
       const next = new URLSearchParams(window.location.search).get("next");
       router.push(
-        data.redirectTo === "/account-unavailable"
+        data.redirectTo === "/account-unavailable" || data.redirectTo === "/payment-review"
           ? data.redirectTo
           : safeInternalRedirect(next, data.redirectTo ?? "/member"),
       );

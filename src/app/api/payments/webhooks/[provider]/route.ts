@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 import {
   completeWebhook,
-  failPayment,
   recordWebhook,
   settlePayment,
 } from "../../../../../server/payments/payment-service";
@@ -21,11 +20,12 @@ export async function POST(
   { params }: { params: Promise<{ provider: string }> },
 ) {
   const { provider } = await params;
-  const configured = getPaymentProvider();
+  if (provider !== "razorpay")
+    return NextResponse.json({ error: "Unknown payment provider" }, { status: 404 });
+  // Receive signed Razorpay events even while member checkout is paused.
+  const configured = getPaymentProvider({ ...process.env, PAYMENT_PROVIDER: provider });
   if (!configured.available)
     return NextResponse.json({ error: "Webhook is not configured" }, { status: 503 });
-  if (provider !== configured.provider.provider)
-    return NextResponse.json({ error: "Unknown payment provider" }, { status: 404 });
 
   try {
     const rawBody = await request.text();
@@ -44,36 +44,41 @@ export async function POST(
 
     if (webhook.kind === "PAYMENT") {
       const payment = await prisma.payment.findUnique({
-        where: { externalId: webhook.paymentExternalId },
-        select: { id: true, method: true, providerOrderId: true, amountPaise: true },
+        where: { providerOrderId: webhook.providerOrderId },
+        select: { id: true, method: true, amountPaise: true },
       });
-      // The verified provider order must belong to the exact Foundation payment;
-      // provider-supplied notes alone are not enough to authorize settlement.
+      // Razorpay may send empty payment notes. Match the unique order previously stored
+      // by the server and verify the amount before applying any financial changes.
       if (
         !payment ||
         payment.method !== "ONLINE" ||
-        payment.providerOrderId !== webhook.providerOrderId ||
         payment.amountPaise !== webhook.amountPaise ||
         webhook.currency !== "INR"
       )
         return NextResponse.json({ error: "Unknown online payment order" }, { status: 400 });
 
+      // A failed Razorpay payment attempt can be retried against the same order.
+      // Keep the order payable and retain the attempt in the webhook log.
       if (webhook.type === "PAYMENT_SUCCEEDED")
         await settlePayment(payment.id, undefined, webhook.providerReference, webhook.occurredAt);
-      else await failPayment(payment.id);
     } else {
       const refund = await prisma.paymentRefund.findUnique({
-        where: { externalId: webhook.refundExternalId },
+        where: webhook.refundExternalId
+          ? { externalId: webhook.refundExternalId }
+          : { providerReference: webhook.refundReference },
         select: {
           externalId: true,
           amountPaise: true,
           method: true,
+          providerReference: true,
           payment: { select: { providerReference: true } },
         },
       });
       if (
         !refund ||
         refund.method !== "ONLINE" ||
+        (refund.providerReference !== null &&
+          refund.providerReference !== webhook.refundReference) ||
         refund.amountPaise !== webhook.amountPaise ||
         refund.payment.providerReference !== webhook.providerPaymentReference
       )
@@ -93,6 +98,6 @@ export async function POST(
       return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
     if (error instanceof ZodError || error instanceof SyntaxError)
       return NextResponse.json({ error: "Invalid webhook" }, { status: 400 });
-    return NextResponse.json({ error: "Webhook processing failed" }, { status: 400 });
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 }

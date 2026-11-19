@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicHeader } from "../components/public-header";
 import { organization } from "../../content/organization";
+import { readPageSession } from "../../server/http/page-session";
 
 export const metadata: Metadata = { title: "About us" };
-export default function AboutPage() {
+export default async function AboutPage() {
+  const session = await readPageSession();
   return (
     <>
       <PublicHeader />
@@ -44,8 +46,8 @@ export default function AboutPage() {
               rules and review process.
             </p>
           </div>
-          <Link className="button-link" href="/register">
-            Become a member →
+          <Link className="button-link" href={session?.dashboard ?? "/register"}>
+            {session ? "My dashboard →" : "Become a member →"}
           </Link>
         </section>
         <section className="organization-source">

@@ -1,5 +1,16 @@
 # Dependency security review — 22 October 2026
 
+## Launch review — 19 November 2026
+
+This section supersedes the earlier dependency finding counts. The full npm audit now reports zero known vulnerabilities with the current lockfile.
+
+- Upgraded the application validator from Zod 3 to Zod 4.6.7 for GHSA-mrhx-c7xc-m3w5. Dictionary schemas now declare their string key type explicitly. Razorpay refund receipt and notes remain explicitly optional, preserving webhook compatibility when a provider omits either field.
+- Upgraded the Vercel AWS credential provider to 3.3.21 and scoped its cli-config dependency to Zod 4.6.7.
+- The compatibility review found Prisma configuration imports the named deepmerge export for merging trusted configuration. Scoped only @prisma/config's deepmerge-ts dependency to 8.0.2 for GHSA-ggr8-5vv4-36mx. Prisma remains on version 6. Schema generation, validation, migrations and application builds must pass with this override.
+- Applied compatible dependency fixes with npm audit fix, without a forced framework or Prisma upgrade.
+
+References: [Zod advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), [Zod migration guide](https://zod.dev/v4/changelog), [DeepmergeTS advisory](https://github.com/advisories/GHSA-ggr8-5vv4-36mx).
+
 ## Scope and decisions
 
 The application remains on Next.js 15, Prisma 6, PostgreSQL, TypeScript and Vitest. No business-rule, schema, payment-provider or architecture migration is included.

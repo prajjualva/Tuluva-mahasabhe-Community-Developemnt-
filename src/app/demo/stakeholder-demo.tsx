@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { SignOutButton } from "../member/sign-out-button";
 import {
   DEMO_STORAGE_KEY,
   DEMO_SESSION_KEY,
@@ -27,7 +28,14 @@ function timestamp() {
   return { id: crypto.randomUUID(), now: new Date().toISOString() };
 }
 
-export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean }) {
+export function StakeholderDemo({
+  livePortal = true,
+  paymentReview = false,
+}: {
+  livePortal?: boolean;
+  paymentReview?: boolean;
+}) {
+  const storageKey = paymentReview ? `${DEMO_STORAGE_KEY}:payment-review` : DEMO_STORAGE_KEY;
   const [state, setState] = useState<DemoState | null>(null);
   const currentState = useRef<DemoState | null>(null);
   const [role, setRole] = useState<DemoRole | null>(null);
@@ -50,21 +58,26 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(DEMO_STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       const parsed = stored ? demoStateSchema.safeParse(JSON.parse(stored)) : null;
       currentState.current = parsed?.success ? parsed.data : initialDemoState();
     } catch {
       currentState.current = initialDemoState();
     }
     setState(currentState.current);
-    try {
-      const savedRole = sessionStorage.getItem(DEMO_SESSION_KEY);
-      if (demoRoles.includes(savedRole as DemoRole)) {
-        roleRef.current = savedRole as DemoRole;
-        setRole(roleRef.current);
+    if (paymentReview) {
+      roleRef.current = "MEMBER";
+      setRole("MEMBER");
+    } else {
+      try {
+        const savedRole = sessionStorage.getItem(DEMO_SESSION_KEY);
+        if (demoRoles.includes(savedRole as DemoRole)) {
+          roleRef.current = savedRole as DemoRole;
+          setRole(roleRef.current);
+        }
+      } catch {
+        /* A presentation can still run without session persistence. */
       }
-    } catch {
-      /* A presentation can still run without session persistence. */
     }
     const readHash = () => {
       const target = location.hash.slice(1);
@@ -73,7 +86,7 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
     readHash();
     window.addEventListener("hashchange", readHash);
     return () => window.removeEventListener("hashchange", readHash);
-  }, []);
+  }, [paymentReview, storageKey]);
 
   function navigate(target: string) {
     if (!roleRef.current) return;
@@ -121,7 +134,7 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
       const next = demoStateSchema.parse(
         applyDemoRoleAction(currentState.current, roleRef.current, action),
       );
-      localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       currentState.current = next;
       setState(next);
       return true;
@@ -275,7 +288,11 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
             </a>
           ))}
         </nav>
-        <button onClick={logout}>Sign out / switch demo login</button>
+        {paymentReview ? (
+          <SignOutButton />
+        ) : (
+          <button onClick={logout}>Sign out / switch demo login</button>
+        )}
         {livePortal && (
           <div className="sidebar-footer">
             <Link href="/member">Live member portal ↗</Link>
@@ -284,7 +301,11 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
       </aside>
       <section className="workspace">
         <header className="workspace-topbar">
-          <span>Stakeholder demo · Simulated payments</span>
+          <span>
+            {paymentReview
+              ? "Payment review · Simulated payments"
+              : "Stakeholder demo · Simulated payments"}
+          </span>
           <button className="demo-text-button" onClick={() => setResetOpen(true)}>
             Reset demo data
           </button>
@@ -447,7 +468,7 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
               <button
                 onClick={() => {
                   try {
-                    localStorage.removeItem(DEMO_STORAGE_KEY);
+                    localStorage.removeItem(storageKey);
                     currentState.current = initialDemoState();
                     setState(currentState.current);
                     setResetOpen(false);
@@ -531,15 +552,17 @@ export function StakeholderDemo({ livePortal = true }: { livePortal?: boolean })
                   const eventDue = state.dues.find((item) => item.eventId === event.id);
                   return (
                     <article className="memorial-card" key={event.id}>
-                      <div className="memorial-portrait">
-                        <Image
-                          src={event.image}
-                          width={420}
-                          height={420}
-                          alt={`Illustrative portrait for ${event.name}`}
-                        />
-                        <span className="memorial-ribbon">IN LOVING MEMORY</span>
-                      </div>
+                      {!paymentReview && (
+                        <div className="memorial-portrait">
+                          <Image
+                            src={event.image}
+                            width={420}
+                            height={420}
+                            alt={`Illustrative portrait for ${event.name}`}
+                          />
+                          <span className="memorial-ribbon">IN LOVING MEMORY</span>
+                        </div>
+                      )}
                       <div className="memorial-content">
                         <p className="eyebrow">COMMUNITY SUPPORT EVENT</p>
                         <h2>{event.name}</h2>

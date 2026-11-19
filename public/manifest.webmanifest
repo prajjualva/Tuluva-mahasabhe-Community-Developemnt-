@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "TuluWorld Community Support",
-  "short_name": "TuluWorld",
-  "description": "Membership and community support from TuluWorld Foundation.",
+  "name": "Tuluva Mahasabhe",
+  "short_name": "Tuluva Mahasabhe",
+  "description": "Tuluva Mahasabhe community development program of Tuluworld Foundation",
   "lang": "en",
   "start_url": "/login",
   "scope": "/",

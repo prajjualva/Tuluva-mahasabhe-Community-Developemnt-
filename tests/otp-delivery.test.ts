@@ -87,7 +87,7 @@ describe("verification delivery providers", () => {
     expect(request.signal).toBeInstanceOf(AbortSignal);
     const payload = JSON.parse(request.body);
     expect(payload.to).toEqual([message.destination]);
-    expect(payload.from).toBe("TuluWorld Foundation <no-reply@notify.example.org>");
+    expect(payload.from).toBe("Tuluva Mahasabhe <no-reply@notify.example.org>");
     expect(payload.text).toContain(message.code);
     expect(payload.text).toContain("10 minutes");
     expect(payload.subject).not.toContain(message.code);

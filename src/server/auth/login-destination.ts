@@ -15,6 +15,7 @@ export async function loginDestination(userId: string) {
     },
   });
   if (user.roles.some((row) => row.role.code === "ADMIN")) return "/admin";
+  if (user.roles.some((row) => row.role.code === "PAYMENT_REVIEWER")) return "/payment-review";
   if (user.member && ["CLOSED", "DECEASED"].includes(user.member.status))
     return "/account-unavailable";
   if (

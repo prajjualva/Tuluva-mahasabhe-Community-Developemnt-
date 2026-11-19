@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireApiPermission } from "../../../../server/http/authorize";
 import { memberIdForUser } from "../../../../server/payments/payment-service";
+import { isDuePayable } from "../../../../server/payments/payment-integrity";
 import { prisma } from "../../../../server/database/prisma";
 
 export async function GET(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:read");
     const memberId = await memberIdForUser(principal.userId);
-    const dues = await prisma.due.findMany({
+    const candidates = await prisma.due.findMany({
       where: { memberId, status: { in: ["PENDING", "OVERDUE", "EXPIRED"] } },
       select: {
         id: true,
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [{ dueAt: "asc" }, { externalId: "asc" }],
     });
+    const now = new Date();
+    const dues = candidates.filter((due) => isDuePayable(due, now));
     const contributionDueIds = dues
       .filter((due) => due.purpose === "CONTRIBUTION")
       .map((due) => due.id);

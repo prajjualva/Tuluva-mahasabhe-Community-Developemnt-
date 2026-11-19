@@ -213,6 +213,12 @@ export async function verifyPersistentOtp(input: unknown, address: string, actor
     const userId = challenge.user.id;
     if (command.purpose === "VERIFY_EMAIL")
       await tx.user.update({ where: { id: userId }, data: { emailVerifiedAt: now } });
+    if (
+      isPublicOtpPurpose(command.purpose) &&
+      challenge.destination === challenge.user.email &&
+      !challenge.user.emailVerifiedAt
+    )
+      await tx.user.update({ where: { id: userId }, data: { emailVerifiedAt: now } });
     if (command.purpose === "VERIFY_MOBILE")
       await tx.user.update({ where: { id: userId }, data: { mobileVerifiedAt: now } });
     if (command.purpose === "CHANGE_EMAIL") {

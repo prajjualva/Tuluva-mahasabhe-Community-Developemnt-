@@ -359,10 +359,18 @@ export const platformGuide: GuideEntry[] = [
 ];
 
 export function filterGuide(query: string, audience: GuideAudience) {
+  return searchGuideEntries(
+    platformGuide.filter(
+      (entry) =>
+        audience === "Everyone" || entry.audience === audience || entry.audience === "Everyone",
+    ),
+    query,
+  );
+}
+
+export function searchGuideEntries(entries: GuideEntry[], query: string) {
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-  return platformGuide.filter((entry) => {
-    if (audience !== "Everyone" && entry.audience !== audience && entry.audience !== "Everyone")
-      return false;
+  return entries.filter((entry) => {
     const text = [entry.title, entry.topic, entry.summary, ...entry.steps, entry.note ?? ""]
       .join(" ")
       .toLocaleLowerCase();

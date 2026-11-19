@@ -8,6 +8,7 @@ import { requireApiPermission } from "../../../../../server/http/authorize";
 import { clientAddress, ThrottleError } from "../../../../../server/auth/login-throttle";
 import { persistSession, signAccessToken } from "../../../../../server/auth/session";
 import { loginDestination } from "../../../../../server/auth/login-destination";
+import { scheduleNotificationDelivery } from "../../../../../server/notifications/notification-delivery-service";
 export async function POST(request: NextRequest) {
   try {
     const input = otpVerifySchema.parse(await request.json());
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
         maxAge: 0,
       });
     }
+    scheduleNotificationDelivery({ userId: result.userId, limit: 4 });
     return response;
   } catch (error) {
     if (error instanceof ThrottleError)

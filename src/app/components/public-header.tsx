@@ -1,17 +1,29 @@
 import Link from "next/link";
 import { OrganizationBrand } from "./organization-brand";
-export function PublicHeader() {
+import { readPageSession } from "../../server/http/page-session";
+
+export async function PublicHeader() {
+  const session = await readPageSession();
   return (
     <header className="public-header">
-      <OrganizationBrand />
+      <OrganizationBrand href={session?.dashboard} />
       <div className="public-links">
         <Link href="/about">About Tuluworld</Link>
         <Link href="/guide">Guide</Link>
         {process.env.NODE_ENV !== "production" && <Link href="/demo">Explore demo</Link>}
         <Link href="/death-support-events">Support events</Link>
-        <Link href="/login">
-          Member sign in <span aria-hidden="true">↗</span>
-        </Link>
+        {session ? (
+          <>
+            {session.permissions.has("member:profile:read") && !session.memberUnavailable && (
+              <Link href="/member/profile">My profile</Link>
+            )}
+            <Link className="public-dashboard-link" href={session.dashboard}>
+              My dashboard
+            </Link>
+          </>
+        ) : (
+          <Link href="/login">Member sign in</Link>
+        )}
       </div>
     </header>
   );

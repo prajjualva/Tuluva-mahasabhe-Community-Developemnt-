@@ -1,22 +1,28 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PublicHeader } from "./components/public-header";
 import { organization } from "../content/organization";
+import { readPageSession } from "../server/http/page-session";
+import { PrivacyLinks } from "./components/privacy-links";
 
-export default function Home() {
+export default async function Home() {
+  const session = await readPageSession();
+  if (session) redirect(session.dashboard);
+
   return (
     <>
       <PublicHeader />
       <main className="home-page">
         <section className="home-hero">
-          <p className="eyebrow">TULUWORLD FOUNDATION · COMMUNITY SUPPORT</p>
+          <p className="eyebrow">TULUVA MAHASABHE</p>
           <h1>
             Rooted in community.
             <br />
             <em>Here for one another.</em>
           </h1>
           <p className="hero-description">
-            A TuluWorld Foundation platform connecting families, Coordinators and community support
-            in one place.
+            A community development program of Tuluworld Foundation connecting families,
+            Coordinators and community support in one place.
           </p>
           <div className="hero-actions">
             <Link className="button-link" href="/register">
@@ -123,8 +129,8 @@ export default function Home() {
           </Link>
         </section>
         <footer className="public-footer">
-          TuluWorld Foundation · Community support, not insurance.{" "}
-          <Link href="/about">About us</Link>
+          Tuluva Mahasabhe · Tuluworld Foundation. <Link href="/about">About us</Link>
+          <PrivacyLinks />
         </footer>
       </main>
     </>

@@ -2,22 +2,38 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-const links = [
-  ["Dashboard", "/member"],
-  ["Profile", "/member/profile"],
-  ["Membership", "/member/membership"],
-  ["Community Support Plan", "/member/community-support-plan"],
-  ["Nominee", "/member/nominee"],
-  ["Dues", "/member/dues"],
-  ["Payments & Receipts", "/member/payments-receipts"],
-  ["Wallet", "/member/wallet"],
-  ["Notifications", "/member/notifications"],
-  ["Community News", "/member/community-news"],
-  ["Coordinator", "/member/coordinator"],
-  ["Death Support Events", "/death-support-events"],
-  ["Report a death", "/death-report"],
-  ["My cash remittances", "/member/cash-remittances"],
-  ["Platform guide", "/guide"],
+const groups = [
+  [
+    "My account",
+    [
+      ["Dashboard", "/member"],
+      ["Profile", "/member/profile"],
+      ["Member ID card", "/member/id-card"],
+      ["Membership", "/member/membership"],
+      ["Community Support Plan", "/member/community-support-plan"],
+      ["Nominee", "/member/nominee"],
+    ],
+  ],
+  [
+    "Payments",
+    [
+      ["Dues", "/member/dues"],
+      ["Payments & receipts", "/member/payments-receipts"],
+      ["Wallet", "/member/wallet"],
+      ["Cash remittances", "/member/cash-remittances"],
+    ],
+  ],
+  [
+    "Community",
+    [
+      ["Notifications", "/member/notifications"],
+      ["Community news", "/member/community-news"],
+      ["My Coordinator", "/member/coordinator"],
+      ["Death Support Events", "/death-support-events"],
+      ["Report a death", "/death-report"],
+      ["Member guide", "/guide"],
+    ],
+  ],
 ] as const;
 export function MemberNavigation() {
   const path = usePathname();
@@ -30,19 +46,24 @@ export function MemberNavigation() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        {open ? "Close menu" : "Open menu"}
+        {open ? "Close" : "Menu"}
       </button>
       <nav id="member-navigation" aria-label="Member navigation" data-open={open}>
         {process.env.NODE_ENV !== "production" && <Link href="/demo">Stakeholder demo ↗</Link>}
-        {links.map(([label, href]) => (
-          <Link
-            key={href}
-            href={href}
-            aria-current={path === href ? "page" : undefined}
-            onClick={() => setOpen(false)}
-          >
-            {label}
-          </Link>
+        {groups.map(([group, links]) => (
+          <div className="member-nav-group" role="group" aria-label={group} key={group}>
+            <p>{group}</p>
+            {links.map(([label, href]) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={path === href ? "page" : undefined}
+                onClick={() => setOpen(false)}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         ))}
       </nav>
     </>

@@ -1,14 +1,14 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { applicationBrand } from "../content/organization";
 
 export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   title: {
-    default: "TuluWorld Foundation | Community Support",
-    template: "%s | TuluWorld Foundation",
+    default: applicationBrand.name + " | Tuluworld Foundation",
+    template: "%s | Tuluva Mahasabhe",
   },
-  description:
-    "The TuluWorld Foundation Community Support platform for membership, community contributions and accountable member services.",
+  description: applicationBrand.fullName,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

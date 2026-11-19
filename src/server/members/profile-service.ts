@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../database/prisma";
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
 import { changeMemberCoordinator } from "../coordinators/coordinator-management-service";
@@ -9,6 +10,7 @@ const profileSelect = {
   address: true,
   status: true,
   joinedAt: true,
+  profilePhoto: { select: { updatedAt: true } },
   user: {
     select: {
       externalId: true,
@@ -28,10 +30,18 @@ const profileSelect = {
   },
   nominees: { where: { isCurrent: true }, select: { kind: true, fullName: true, status: true } },
 } as const;
+
+function profileResponse({
+  profilePhoto,
+  ...profile
+}: Prisma.MemberGetPayload<{ select: typeof profileSelect }>) {
+  return { ...profile, photoUpdatedAt: profilePhoto?.updatedAt ?? null };
+}
+
 export async function readOwnProfile(userId: string) {
   const profile = await prisma.member.findUnique({ where: { userId }, select: profileSelect });
   if (!profile) throw new Error("Member not found");
-  return profile;
+  return profileResponse(profile);
 }
 export async function updateOwnProfile(userId: string, input: unknown) {
   const command = z
@@ -59,7 +69,7 @@ export async function updateOwnProfile(userId: string, input: unknown) {
         afterState: command,
       },
     });
-    return result;
+    return profileResponse(result);
   });
 }
 export async function listActiveCoordinatorChoices() {

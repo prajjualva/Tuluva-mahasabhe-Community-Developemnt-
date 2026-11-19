@@ -39,8 +39,8 @@ const androidManifest = new TwaManifest({
   enableNotifications: false,
   minSdkVersion: 24,
   splashScreenFadeOutDuration: 300,
-  appVersion: "1.0.0",
-  appVersionCode: 1,
+  appVersion: "1.0.1",
+  appVersionCode: 2,
   signingKey: { path: "upload-key.jks", alias: "tuluworld-upload" },
 });
 

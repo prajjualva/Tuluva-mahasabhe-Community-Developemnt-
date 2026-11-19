@@ -121,10 +121,18 @@ export async function settlePayment(
         throw new Error("Payment capture reference does not match the settled payment");
       return { payment: existing, receipt: existing.receipt, alreadySettled: true };
     }
-    if (existing.status !== "PENDING") throw new Error("Payment is not pending");
+    // Older failed webhooks closed the whole order and could compensate a split wallet debit.
+    // A later verified capture on such an order must be recorded for refund review.
+    const previouslyFailedOrder =
+      existing.status === "FAILED" &&
+      existing.method === "ONLINE" &&
+      Boolean(existing.providerOrderId) &&
+      Boolean(existing.due);
+    if (existing.status !== "PENDING" && !previouslyFailedOrder)
+      throw new Error("Payment is not pending");
 
-    let appliedToDue = true;
-    if (existing.due) {
+    let appliedToDue = !previouslyFailedOrder;
+    if (existing.due && appliedToDue) {
       try {
         assertDueSettlementAllowed(existing.due, settledAt);
       } catch (error) {

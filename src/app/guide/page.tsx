@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PublicHeader } from "../components/public-header";
 import { GuideExplorer } from "./guide-explorer";
+import { filterGuide, type GuideAudience } from "../../content/platform-guide";
+import { requirePagePermission } from "../../server/http/page-authorize";
+import { readPageSession } from "../../server/http/page-session";
 
 export const metadata: Metadata = {
   title: "Platform Guide",
@@ -9,24 +12,41 @@ export const metadata: Metadata = {
     "Understand membership, plan approvals, dues, wallet, receipts and Foundation workspaces.",
 };
 
-export default function GuidePage() {
+export default async function GuidePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ workspace?: string }>;
+}) {
+  const { workspace } = await searchParams;
+  const session = await readPageSession();
+  let audience: GuideAudience = "Member";
+  if (workspace === "admin") {
+    await requirePagePermission("admin:*", "/guide?workspace=admin");
+    audience = "Admin";
+  } else if (workspace === "coordinator") {
+    await requirePagePermission("coordinator:members:manage", "/guide?workspace=coordinator");
+    audience = "Coordinator";
+  }
+  const guides = filterGuide("", audience)
+    .filter((entry) => !session || entry.id !== "registration")
+    .map((entry) =>
+      session && entry.id === "privacy"
+        ? { ...entry, href: session.dashboard, action: "Open my dashboard" }
+        : entry,
+    );
+
   return (
     <>
       <PublicHeader />
       <main className="guide-page">
         <header className="guide-intro">
           <p className="eyebrow">THE PLATFORM, EXPLAINED</p>
-          <h1>
-            A little clarity.
-            <br />
-            <em>Every step of the way.</em>
-          </h1>
+          <h1>{audience} guide</h1>
           <p className="hero-description">
-            What each screen does, who can use it, and what happens next. Choose your role or search
-            for a task, then open a guide.
+            Search for a task to see how it works and where to go next.
           </p>
         </header>
-        <GuideExplorer />
+        <GuideExplorer guides={guides} />
         <footer className="guide-help">
           <h2>Need a person, not a page?</h2>
           <p>

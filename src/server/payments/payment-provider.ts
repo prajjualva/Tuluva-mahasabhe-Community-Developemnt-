@@ -40,7 +40,6 @@ export type VerifiedPaymentWebhook =
       providerEventId: string;
       kind: "PAYMENT";
       type: "PAYMENT_SUCCEEDED" | "PAYMENT_FAILED";
-      paymentExternalId: string;
       providerOrderId: string;
       providerReference: string;
       amountPaise: number;
@@ -53,7 +52,7 @@ export type VerifiedPaymentWebhook =
       providerEventId: string;
       kind: "REFUND";
       type: "REFUND_SUCCEEDED" | "REFUND_FAILED";
-      refundExternalId: string;
+      refundExternalId?: string;
       refundReference: string;
       providerPaymentReference: string;
       amountPaise: number;
@@ -100,16 +99,14 @@ const razorpayPaymentEntitySchema = z.object({
   order_id: z.string().min(1).max(200),
   amount: z.number().int().positive(),
   currency: z.literal("INR"),
-  created_at: z.number().int().nonnegative().optional(),
-  notes: z.record(z.unknown()).default({}),
 });
 
 const razorpayRefundEntitySchema = z.object({
   id: z.string().min(1).max(200),
   payment_id: z.string().min(1).max(200),
   amount: z.number().int().positive(),
-  created_at: z.number().int().nonnegative().optional(),
-  notes: z.record(z.unknown()).default({}),
+  receipt: z.unknown().optional(),
+  notes: z.unknown().optional(),
 });
 
 const razorpayWebhookSchema = z.object({
@@ -141,13 +138,6 @@ function equalDigest(expected: string, supplied: string) {
     expectedBuffer.length === suppliedBuffer.length &&
     timingSafeEqual(expectedBuffer, suppliedBuffer)
   );
-}
-
-function externalIdFromNotes(notes: Record<string, unknown>, key: string) {
-  const externalId = notes[key];
-  if (typeof externalId !== "string" || !z.string().uuid().safeParse(externalId).success)
-    throw new PaymentProviderSignatureError();
-  return externalId;
 }
 
 /**
@@ -283,7 +273,6 @@ export class RazorpayPaymentProvider implements PaymentProvider {
         // makes retried deliveries idempotent while keeping failed/captured events distinct.
         providerEventId: `${parsed.event}:${entity.id}`,
         type: parsed.event === "payment.captured" ? "PAYMENT_SUCCEEDED" : "PAYMENT_FAILED",
-        paymentExternalId: externalIdFromNotes(entity.notes, "foundation_payment_external_id"),
         providerOrderId: entity.order_id,
         providerReference: entity.id,
         amountPaise: entity.amount,
@@ -301,12 +290,16 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     }
     const entity = parsed.payload.refund?.entity;
     if (!entity) throw new PaymentProviderSignatureError();
+    const notes = z
+      .object({ foundation_refund_external_id: z.string().uuid() })
+      .safeParse(entity.notes);
+    const receipt = z.string().uuid().safeParse(entity.receipt);
     return {
       provider: this.provider,
       kind: "REFUND",
       providerEventId: `${parsed.event}:${entity.id}`,
       type: parsed.event === "refund.processed" ? "REFUND_SUCCEEDED" : "REFUND_FAILED",
-      refundExternalId: externalIdFromNotes(entity.notes, "foundation_refund_external_id"),
+      refundExternalId: notes.data?.foundation_refund_external_id ?? receipt.data,
       refundReference: entity.id,
       providerPaymentReference: entity.payment_id,
       amountPaise: entity.amount,
