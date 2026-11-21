@@ -1,5 +1,15 @@
 # Dependency security review — 22 October 2026
 
+## Launch review — 21 November 2026
+
+The new audit reported four package findings: the Prisma/config/Effect chain accounts for three high package findings from one Effect advisory, and Next.js has one moderate package finding covering three advisories. These findings supersede the zero-finding result recorded on 19 November; audit results change as advisories are published.
+
+- Raise Next.js and its matching lint-tool minimum to **15.5.29**, the patched Next.js 15 release for the image optimizer SVG check, Edge response cookie-header exposure and forwarded-response issues. Keep the existing framework major and PostCSS security override.
+- Scope `effect` **3.22.5** to `@prisma/config`. The installed Prisma configuration package pins vulnerable Effect 3.21.0; the maintainer's fix starts at 3.22.1. This stays on Effect 3 rather than overriding Prisma to Effect 4 or downgrading Prisma to clear the audit. Validate configuration loading, schema validation, generation, isolated migrations and the full test/build pipeline with the override.
+- These are dependency changes. They do not alter financial rules, membership state, payment settlement, database schema or the Android upload key.
+
+References: [Effect maintainer advisory](https://github.com/Effect-TS/effect/security/advisories/GHSA-7589-6fvf-x4pw), [Next.js image advisory](https://github.com/vercel/next.js/security/advisories/GHSA-7qx7-33qx-rqx2), [Next.js cookie advisory](https://github.com/vercel/next.js/security/advisories/GHSA-f3mh-rxg3-f5g2), [Next.js forwarded-response advisory](https://github.com/vercel/next.js/security/advisories/GHSA-pc58-hwjq-p385).
+
 ## Launch review — 19 November 2026
 
 This section supersedes the earlier dependency finding counts. The full npm audit now reports zero known vulnerabilities with the current lockfile.
