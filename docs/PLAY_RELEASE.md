@@ -2,7 +2,24 @@
 
 Package name is org.tuluworld.communitysupport. The first signed bundle, version code 1 and version name 1.0.0, is active on the internal testing track. The application opens the production portal through a Trusted Web Activity.
 
-The updated bundle is version code **2**, version name **1.0.1**. It uses the Tuluva Mahasabhe launcher name and the supplied emblem. It has been built in CI, signed with the existing upload key and validated with bundletool. Its local handoff file is `C:/Users/Admin/Downloads/Tuluva-Mahasabhe-internal-v2.aab`. This is a prepared artifact, not evidence that Play has received or released version 2. Upload it to a new Internal testing release without creating another package or signing key.
+The updated bundle is version code **2**, version name **1.0.1**. It uses the Tuluva Mahasabhe launcher name and the supplied emblem. It has been built in CI, signed with the existing upload key and validated with bundletool. Its local handoff file is `C:/Users/Admin/Downloads/Tuluva-Mahasabhe-internal-v2.aab`. On 21 November, Play accepted this bundle and the release **Tuluva Mahasabhe 1.0.1** was published to the existing Internal testing track. Console explicitly showed **Available to internal testers**. It is not a public production release.
+
+## Verified release progress — 21 November 2026
+
+- Retrieved the official public app-signing certificate archive from this application's Play Console signing page. Verified the legacy certificate fingerprint against the package-specific Digital Asset Links statement shown by Play. Configured all three certificate fingerprints (legacy, hybrid classical and hybrid post-quantum) in Vercel Production as `ANDROID_PLAY_SIGNING_SHA256`.
+- Promoted deployment `dpl_b7tGZgRrACoPK9fwfVhpGNEkwBZD`. The live `/.well-known/assetlinks.json` returns HTTP 200 with `org.tuluworld.communitysupport` and three certificate fingerprints. Google's Digital Asset Links API independently returned three matching statements. The Play-installed app still needs an Android-device check after refreshing/reopening it.
+- Uploaded and published version code 2 / version 1.0.1 to Internal testing with the new launcher branding and release notes. The existing tester list and package remain in use. Public access remains inactive.
+- Saved the live privacy-policy URL and the default store listing (new name, original supplied emblem, feature graphic and two isolated-data UI screenshots). The feature graphic carries the AI-assisted asset label; the supplied emblem and direct UI captures were not labeled as generated artwork. Listing changes are ready to send for review, not approved or public.
+- Saved declarations for no ads, no advertising ID, non-government app and no health features. After the owner explicitly approved IARC terms, completed and saved the content-rating questionnaire: user interaction and remotely published content disclosed, with moderated comments. These saved changes still need submission through Publishing overview.
+- Created the owner-approved dedicated reviewer Member through the normal persistent registration service, using owner-supplied Foundation contact details and the existing active referring Coordinator. Verified password login and Member profile/dues/wallet/receipt APIs return 200; Admin payments returns 403. No payments, receipts, paid entitlement or wallet credits were fabricated. Credentials are kept only in a protected local handoff, not this repository.
+- Reviewer sign-in details are entered privately in Google's form but **not saved**: Google requires a full-access attestation, and the initial Add attempt returned a validation error. Resolve the scope of reviewer access and paid/staff workflows honestly before making that attestation; do not grant access to real members' private financial data merely to satisfy the form. Audience 18+ is owner-confirmed but its form remains blocked by incomplete sign-in details.
+- Saved a **draft**, not a submitted declaration, for financial features: mobile payments/digital wallets and community crowdfunding are proposed classifications pending owner/policy review. The documentation step currently asks for no additional uploads; this does not establish that a Personal account is appropriate. Google's organization-account requirements for financial services must be resolved before public submission. See https://support.google.com/googleplay/android-developer/answer/13634885.
+- Saved a partial Data safety draft with collection, transport encryption, password/OTP sign-in and the live account-deletion request URL. Initial data types include identity/contact details, payment/bank and transaction records, profile photos, evidence files, interactions and community content. Per-type handling, provider SDK disclosures and any health-related evidence/technical identifiers still require review; no completed Data safety declaration is claimed.
+- Release review identified a source follow-up: users can post comments and staff can moderate them, but member-facing reporting and blocking controls were not found. Assess and implement the applicable UGC safeguards before public release; the rating questionnaire does not claim that those controls already exist.
+- Console confirms zero Closed testing testers opted in and requires at least 12 opted-in testers continuously for 14 days before applying for production access on this Personal account.
+- The security-patched Next.js 15.5.29 / Prisma configuration dependencies passed all 319 isolated CI tests and the production build, with zero known vulnerabilities in full-tree and production-only npm audits. A separate browser regression run passed the Member, Coordinator and Admin workflows. The CI workflow now checks npm audit explicitly.
+
+The 20 November notes below remain historical evidence; the signing-association and version 2 upload blockers recorded there are now resolved.
 
 ## Verified release state — 20 November 2026
 
@@ -19,8 +36,8 @@ The website is deployed. These checks do not constitute public Google Play appro
 
 ## Next Play Console steps
 
-1. Open **Protected with Play → Play app signing**. Copy each relevant public SHA-256 fingerprint under **App signing key certificate**. Configure the comma-separated values as `ANDROID_PLAY_SIGNING_SHA256` in Vercel Production, deploy, and verify `/.well-known/assetlinks.json` before checking the installed app's browser bar. Include applicable older/newer device signing certificates if Play shows multiple keys.
-2. Under **Internal testing → Create new release**, upload the signed version 2 bundle. Use release name `Tuluva Mahasabhe 1.0.1` and these notes:
+1. On an Android phone, update to the available Internal testing release, close/reopen it, and verify launcher branding, navigation and website association. The certificate configuration and Google verification are complete; actual Android-device behavior is a separate acceptance check.
+2. Version 2 is published to Internal testing as **Tuluva Mahasabhe 1.0.1** with these notes:
 
    ```text
    <en-GB>
@@ -94,7 +111,7 @@ The developer must review these declarations against the current providers and d
 
 ## Remaining owner/provider work
 
-- Obtain the Play app signing public SHA-256 fingerprint(s) and configure ANDROID_PLAY_SIGNING_SHA256 in Production. Validate the live association endpoint and the Play-installed app.
+- Check the Play-installed Android app against the now-verified live website association and version 1.0.1 internal release.
 - D-U-N-S application reference DR111620263691302308 is pending. Verify organization status and the developer account conversion with Google when the number is available.
 - The Personal account's production-access requirements must be checked in Play Console. Internal testers do not satisfy the separate closed testing requirement. The current rule for new Personal accounts requires 12 opted-in testers for 14 continuous days before applying for production access.
 - Complete Play Console store assets, content rating, app-access instructions, Data safety and applicable financial-features declarations. Confirm Google's classification of the Foundation plan, contributions and wallet before public submission.
