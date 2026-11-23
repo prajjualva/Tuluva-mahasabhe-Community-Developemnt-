@@ -4,6 +4,11 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import type { PublicDeathSupportEvent } from "../published-event-list";
 import { EventProgress } from "../event-card";
+import {
+  CommentSafety,
+  CommunityRulesConsent,
+  BlockedAuthors,
+} from "../../components/comment-safety";
 
 type Condolence = {
   externalId: string;
@@ -71,7 +76,7 @@ export function PublicEventDetail({ eventId }: { eventId: string }) {
       const response = await fetch(`/api/death-events/${encodeURIComponent(eventId)}/comments`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, rulesAccepted: true }),
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -131,6 +136,18 @@ export function PublicEventDetail({ eventId }: { eventId: string }) {
                   <strong>{item.authorName}</strong>
                   <p>{item.body}</p>
                   <small>{new Date(item.createdAt).toLocaleString()}</small>
+                  <CommentSafety
+                    kind="EVENT_COMMENT"
+                    parentExternalId={eventId}
+                    commentExternalId={item.externalId}
+                    onBlocked={() =>
+                      void load().then(() =>
+                        setMessage(
+                          "Author blocked. Their comments are hidden while you are signed in.",
+                        ),
+                      )
+                    }
+                  />
                 </section>
               ))
             ) : (
@@ -152,6 +169,7 @@ export function PublicEventDetail({ eventId }: { eventId: string }) {
                 <button type="submit" disabled={submitting}>
                   {submitting ? "Posting…" : "Post condolence"}
                 </button>
+                <CommunityRulesConsent />
                 <p className="muted">Sign in with a member account to post a condolence.</p>
                 {commentSignInRequired && (
                   <p>
@@ -169,6 +187,7 @@ export function PublicEventDetail({ eventId }: { eventId: string }) {
               </p>
             )}
           </article>
+          <BlockedAuthors />
         </>
       )}
     </main>

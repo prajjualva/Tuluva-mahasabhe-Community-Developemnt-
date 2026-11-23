@@ -22,6 +22,7 @@ export async function adminDashboardSnapshot() {
     waivers,
     adjustments,
     temporarilyManagedMembers,
+    contentReports,
   ] = await Promise.all([
     prisma.member.groupBy({ by: ["status"], _count: true }),
     prisma.coordinator.groupBy({ by: ["status"], _count: true }),
@@ -56,6 +57,7 @@ export async function adminDashboardSnapshot() {
     prisma.member.count({
       where: { coordinatorId: null, status: { notIn: ["CLOSED", "DECEASED"] } },
     }),
+    prisma.contentReport.count({ where: { status: "OPEN" } }),
   ]);
   return {
     generatedAt: new Date(),
@@ -79,6 +81,7 @@ export async function adminDashboardSnapshot() {
       waiverApprovals: waivers,
       operationalAdjustments: adjustments,
       temporarilyManagedMembers,
+      contentReports,
       pendingAdminTasks:
         plans +
         nominees +
@@ -88,7 +91,8 @@ export async function adminDashboardSnapshot() {
         supportPayments +
         news +
         waivers +
-        adjustments,
+        adjustments +
+        contentReports,
     },
   };
 }

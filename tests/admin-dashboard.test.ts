@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     communityNews: counter(),
     dueWaiverRequest: counter(),
     ledgerAdjustment: counter(),
+    contentReport: counter(),
   };
 });
 vi.mock("../src/server/database/prisma", () => ({ prisma: mocks }));
@@ -32,7 +33,8 @@ describe("complete Admin work queue summary", () => {
       waiverApprovals: 1,
       operationalAdjustments: 1,
       temporarilyManagedMembers: 1,
-      pendingAdminTasks: 9,
+      contentReports: 1,
+      pendingAdminTasks: 10,
     });
     expect(mocks.communitySupportPlan.count.mock.calls[0][0].where).toMatchObject({
       OR: [

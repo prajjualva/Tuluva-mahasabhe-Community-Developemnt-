@@ -2,6 +2,7 @@ import { CommentStatus, NewsStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../database/prisma";
 import { createInAppNotificationInTransaction } from "../notifications/notification-service";
+import { hiddenCommentAuthors } from "../community/comment-visibility";
 
 export const NEWS_AUDIENCES = ["COORDINATOR_MEMBERS", "FOUNDATION_WIDE"] as const;
 export type NewsAudience = (typeof NEWS_AUDIENCES)[number];
@@ -67,7 +68,7 @@ async function activeCoordinatorForUser(tx: Prisma.TransactionClient, userId: st
   return coordinator;
 }
 
-async function assertNewsVisibleToMember(
+export async function assertNewsVisibleToMember(
   tx: Prisma.TransactionClient,
   newsExternalId: string,
   userId: string,
@@ -462,7 +463,11 @@ export async function listNewsCommentsForMember(newsExternalId: string, userId: 
   return prisma.$transaction(async (tx) => {
     const { news } = await assertNewsVisibleToMember(tx, newsExternalId, userId);
     const comments = await tx.newsComment.findMany({
-      where: { newsId: news.id, status: "PUBLISHED" },
+      where: {
+        newsId: news.id,
+        status: "PUBLISHED",
+        userId: { notIn: await hiddenCommentAuthors(tx, userId) },
+      },
       select: safeNewsCommentSelect,
       orderBy: { createdAt: "asc" },
       take: 200,

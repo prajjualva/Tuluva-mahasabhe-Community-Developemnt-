@@ -1862,3 +1862,33 @@ button:disabled {
     padding: 28px 20px;
   }
 }
+.comment-safety {
+  margin-top: 10px;
+}
+.comment-safety .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.comment-safety .button-row button {
+  background: transparent;
+  color: var(--muted, #52645e);
+  border: 0;
+  border-radius: 0;
+  padding: 4px 0;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.checkbox-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+}
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}

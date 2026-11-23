@@ -23,6 +23,7 @@ const tasks: [string, string, string][] = [
   ["ledgerEntries", "Ledger entries", "ledger"],
   ["auditActivity", "Audit records", "audit"],
   ["newsApprovals", "News approvals", "news"],
+  ["contentReports", "Reported comments", "content-reports"],
   ["waiverApprovals", "Waiver approvals", "waivers"],
   ["operationalAdjustments", "Operational adjustments", "ledger"],
 ];

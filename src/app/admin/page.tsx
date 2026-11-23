@@ -16,6 +16,7 @@ import { DueWaivers } from "../components/due-waivers";
 import { OperationsShell } from "../components/operations-shell";
 import { AdminUserManagement } from "./user-management";
 import { AccountDeletionQueue } from "./account-deletion-queue";
+import { ContentReportQueue } from "./content-report-queue";
 export default async function AdminDashboard() {
   await requirePagePermission("admin:*", "/admin");
   return (
@@ -130,6 +131,12 @@ export default async function AdminDashboard() {
           description:
             "Review account deletion requests and communicate identity or retention requirements.",
           content: <AccountDeletionQueue />,
+        },
+        {
+          id: "content-reports",
+          label: "Reported comments",
+          description: "Review member safety reports and record moderation decisions.",
+          content: <ContentReportQueue />,
         },
       ]}
     />

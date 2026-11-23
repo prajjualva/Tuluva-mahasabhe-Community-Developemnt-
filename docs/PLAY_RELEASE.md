@@ -4,6 +4,18 @@ Package name is org.tuluworld.communitysupport. The first signed bundle, version
 
 The updated bundle is version code **2**, version name **1.0.1**. It uses the Tuluva Mahasabhe launcher name and the supplied emblem. It has been built in CI, signed with the existing upload key and validated with bundletool. Its local handoff file is `C:/Users/Admin/Downloads/Tuluva-Mahasabhe-internal-v2.aab`. On 21 November, Play accepted this bundle and the release **Tuluva Mahasabhe 1.0.1** was published to the existing Internal testing track. Console explicitly showed **Available to internal testers**. It is not a public production release.
 
+## Safety implementation and verification — 23 November 2026
+
+- Implemented persistent comment reports and mutual author blocking for community news and public condolences. Member APIs enforce authenticated ownership and current news-audience relationships; report submissions are rate limited. Blocking does not remove public content or hide it from signed-out visitors. Unblocking is restricted to the block owner.
+- Added an Admin report queue with required decision reasons, conditional decision claims, audited removal/dismissal, and open-report counts in the Admin overview. Reports do not automatically remove content. Original comments and reports are retained; moderation changes visibility.
+- Added community rules, required posting consent at the API boundary and in both comment forms, minimal report/block actions and blocked-author management. Updated the privacy notice with report/block records and Razorpay device/network metadata.
+- All **326 automated tests passed**, including isolated Neon database tests and new safety integration tests. The disposable test database was removed. Separately verified the phone-width UI in another isolated database: reporting, hiding a blocked author's comments, owner unblocking/restoring comments, native required-consent validation, and audited Admin removal. That UI database and its documents were removed too; no synthetic safety comments or events were added to production.
+- Schema validation, TypeScript, ESLint, Prettier and production build passed during implementation. Final commit/deployment validation is recorded below when complete. No payment, membership, contribution or eligibility rule changed.
+- Play's Data safety draft now contains per-type handling for the selected identity/contact, financial, photo, document and community-activity data, plus approximate location/device identifiers used by checkout/security providers. It remains a **draft**, not a submitted or approved declaration: provider sharing exceptions and the completeness of sensitive evidence disclosures still require final review.
+- The connected-mailbox search on 23 November found no message since 19 November matching the D-U-N-S reference or D&B sender/subject query. Other mailboxes and provider review status were not established.
+
+The earlier missing reporting/blocking source work described below is resolved by this implementation; production deployment is a separate step.
+
 ## Verified release progress — 21 November 2026
 
 - Retrieved the official public app-signing certificate archive from this application's Play Console signing page. Verified the legacy certificate fingerprint against the package-specific Digital Asset Links statement shown by Play. Configured all three certificate fingerprints (legacy, hybrid classical and hybrid post-quantum) in Vercel Production as `ANDROID_PLAY_SIGNING_SHA256`.

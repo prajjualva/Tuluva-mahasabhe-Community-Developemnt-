@@ -4,6 +4,7 @@ import { z } from "zod";
 import { contributionProgress } from "../../domain/contribution-progress";
 import { generateContributionDuesInTransaction } from "../contributions/contribution-generation-service";
 import { prisma } from "../database/prisma";
+import { hiddenCommentAuthors } from "../community/comment-visibility";
 import {
   readDeathEvidence,
   removeDeathEvidence,
@@ -1275,14 +1276,18 @@ const toPublicComment = (
   createdAt: comment.createdAt,
 });
 
-export async function listPublishedEventComments(eventExternalId: string) {
+export async function listPublishedEventComments(eventExternalId: string, viewerId?: string) {
   const event = await prisma.contributionEvent.findFirst({
     where: { externalId: eventExternalId, status: { in: ["PUBLISHED", "CLOSED"] } },
     select: { id: true },
   });
   if (!event) throw new Error("Published Death Support Event not found");
   const comments = await prisma.comment.findMany({
-    where: { eventId: event.id, status: "PUBLISHED" },
+    where: {
+      eventId: event.id,
+      status: "PUBLISHED",
+      ...(viewerId ? { userId: { notIn: await hiddenCommentAuthors(prisma, viewerId) } } : {}),
+    },
     orderBy: { createdAt: "asc" },
     select: publicCommentSelect,
   });

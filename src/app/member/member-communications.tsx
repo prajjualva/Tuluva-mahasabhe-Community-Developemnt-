@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { readMemberRecord } from "./member-record-loader";
+import { BlockedAuthors, CommentSafety, CommunityRulesConsent } from "../components/comment-safety";
 
 type Notification = {
   externalId: string;
@@ -142,7 +143,7 @@ export function MemberCommunications({ section }: { section: "notifications" | "
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ body }),
+          body: JSON.stringify({ body, rulesAccepted: true }),
         },
       );
       const data = await readJson(response);
@@ -233,6 +234,7 @@ export function MemberCommunications({ section }: { section: "notifications" | "
       ) : (
         <article aria-label="Published updates">
           <h2>Published updates</h2>
+          <BlockedAuthors />
           {unavailable.includes("news") ? (
             <p>Community news could not be loaded. Please retry.</p>
           ) : news.length ? (
@@ -261,6 +263,17 @@ export function MemberCommunications({ section }: { section: "notifications" | "
                     <strong>{comment.authorName}</strong>
                     <p>{comment.body}</p>
                     <small>{new Date(comment.createdAt).toLocaleString()}</small>
+                    <CommentSafety
+                      kind="NEWS_COMMENT"
+                      parentExternalId={item.externalId}
+                      commentExternalId={comment.externalId}
+                      onBlocked={() => {
+                        setMessage(
+                          "Author blocked. Their comments are hidden while you are signed in.",
+                        );
+                        void loadComments(item.externalId);
+                      }}
+                    />
                   </section>
                 ))}
                 <form onSubmit={(event) => void postComment(event, item.externalId)}>
@@ -279,6 +292,7 @@ export function MemberCommunications({ section }: { section: "notifications" | "
                   <button disabled={working === `post:${item.externalId}`} type="submit">
                     {working === `post:${item.externalId}` ? "Posting…" : "Post comment"}
                   </button>
+                  <CommunityRulesConsent />
                 </form>
               </section>
             ))

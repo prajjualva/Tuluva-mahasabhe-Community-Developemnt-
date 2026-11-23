@@ -5,16 +5,21 @@ import {
   listPublishedEventComments,
 } from "../../../../../server/death/death-workflow-service";
 import { requireApiPermission } from "../../../../../server/http/authorize";
+import { z } from "zod";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   try {
     const { eventId } = await params;
+    const authenticated = !!(
+      request.cookies.get("access_token")?.value || request.headers.get("authorization")
+    );
+    const actor = authenticated ? await requireApiPermission(request, "member:profile:read") : null;
     return NextResponse.json(
-      { comments: await listPublishedEventComments(eventId) },
-      { headers: { "Cache-Control": "public, max-age=60" } },
+      { comments: await listPublishedEventComments(eventId, actor?.userId) },
+      { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch {
     return NextResponse.json({ error: "Comments not found" }, { status: 404 });
@@ -28,8 +33,12 @@ export async function POST(
   try {
     const principal = await requireApiPermission(request, "member:profile:read");
     const { eventId } = await params;
+    const { body } = z
+      .object({ body: z.string().trim().min(2).max(1000), rulesAccepted: z.literal(true) })
+      .strict()
+      .parse(await request.json());
     return NextResponse.json(
-      { comment: await addCondolenceComment(eventId, principal.userId, await request.json()) },
+      { comment: await addCondolenceComment(eventId, principal.userId, { body }) },
       { status: 201, headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {

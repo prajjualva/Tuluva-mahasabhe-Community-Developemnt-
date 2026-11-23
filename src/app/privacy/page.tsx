@@ -11,7 +11,7 @@ export default function PrivacyPage() {
       <PublicHeader />
       <main className="policy-page">
         <h1>Privacy policy</h1>
-        <p className="muted">Tuluva Mahasabhe · Updated 19 November 2026</p>
+        <p className="muted">Tuluva Mahasabhe · Updated 23 November 2026</p>
         <p>
           Tuluva Mahasabhe community development program of Tuluworld Foundation manages community
           membership, contributions and reviewed support requests. Contact{" "}
@@ -43,6 +43,19 @@ export default function PrivacyPage() {
           Session cookies keep you signed in. We also use account and request information to limit
           abuse, diagnose failures and audit sensitive actions. Network, hosting and payment
           providers may process technical information needed to deliver their services.
+        </p>
+        <p>
+          Payment checkout can collect device identifiers, browser and network information, cookies,
+          interactions and approximate location inferred from your IP address for payment processing
+          and fraud prevention. The Foundation app does not request GPS access. See Razorpay’s{" "}
+          <a href="https://razorpay.com/buyer-privacy-notice/">buyer privacy notice</a>
+          for its handling of checkout information.
+        </p>
+        <p>
+          We retain comment reports, moderation decisions and your blocked-author preferences.
+          Reports are available to authorized Foundation Admins, not published to other members.
+          Blocking affects signed-in comment visibility; it does not erase public comments. Read our{" "}
+          <Link href="/community-rules">community rules</Link> before posting.
         </p>
         <h2>How information is used and shared</h2>
         <p>

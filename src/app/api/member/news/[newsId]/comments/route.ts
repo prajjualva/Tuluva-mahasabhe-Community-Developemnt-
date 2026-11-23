@@ -7,7 +7,9 @@ import {
 import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { communicationRouteError } from "../../../../communication-route-response";
 
-const commentSchema = z.object({ body: z.string().trim().min(1).max(2000) }).strict();
+const commentSchema = z
+  .object({ body: z.string().trim().min(1).max(2000), rulesAccepted: z.literal(true) })
+  .strict();
 
 export async function GET(
   request: NextRequest,

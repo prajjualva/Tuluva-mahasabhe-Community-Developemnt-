@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ThrottleError } from "../../server/auth/login-throttle";
 
 /**
  * Keep public API failures useful without returning database, authentication, or
@@ -6,6 +7,11 @@ import { NextResponse } from "next/server";
  * full audit trails server-side.
  */
 export function communicationRouteError(error: unknown, fallback: string) {
+  if (error instanceof ThrottleError)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      { status: 429 },
+    );
   const message = error instanceof Error ? error.message : "";
   const normalized = message.toLowerCase();
   const status =
@@ -23,6 +29,7 @@ export function communicationRouteError(error: unknown, fallback: string) {
           : 400;
 
   const safeMessages = new Set([
+    "You cannot block yourself",
     "Notification not found",
     "News item not found",
     "Only drafts can be edited",

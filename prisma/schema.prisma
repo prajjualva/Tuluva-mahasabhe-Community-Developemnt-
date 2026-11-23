@@ -176,22 +176,22 @@ enum NewsStatus {
 }
 
 model User {
-  id               String                @id @default(uuid()) @db.Uuid
-  externalId       String                @unique @default(uuid()) @db.Uuid
-  email            String?               @unique
-  mobile           String?               @unique
+  id               String                  @id @default(uuid()) @db.Uuid
+  externalId       String                  @unique @default(uuid()) @db.Uuid
+  email            String?                 @unique
+  mobile           String?                 @unique
   passwordHash     String?
   emailVerifiedAt  DateTime?
   mobileVerifiedAt DateTime?
-  pendingEmail     String?               @unique
-  pendingMobile    String?               @unique
-  status           UserStatus            @default(ACTIVE)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  pendingEmail     String?                 @unique
+  pendingMobile    String?                 @unique
+  status           UserStatus              @default(ACTIVE)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
   member           Member?
   roles            UserRole[]
-  auditLogs        AuditLog[]            @relation("AuditActor")
-  verifiedNominees NomineeVerification[] @relation("NomineeVerifier")
+  auditLogs        AuditLog[]              @relation("AuditActor")
+  verifiedNominees NomineeVerification[]   @relation("NomineeVerifier")
   sessions         AuthSession[]
   otpChallenges    OtpChallenge[]
   passwordResets   PasswordReset[]
@@ -199,6 +199,10 @@ model User {
   newsComments     NewsComment[]
   notifications    Notification[]
   deletionRequest  AccountDeletionRequest?
+  contentReports   ContentReport[]         @relation("ContentReporter")
+  reviewedReports  ContentReport[]         @relation("ContentReviewer")
+  blockedUsers     UserBlock[]             @relation("BlockOwner")
+  blockedBy        UserBlock[]             @relation("BlockedUser")
 
   @@map("users")
 }
@@ -1124,6 +1128,50 @@ model ContributionEventReversal {
 
   @@index([cancellationId, status])
   @@map("contribution_event_reversals")
+}
+
+enum ContentKind {
+  NEWS_COMMENT
+  EVENT_COMMENT
+}
+
+enum ContentReportStatus {
+  OPEN
+  REMOVED
+  DISMISSED
+}
+
+model ContentReport {
+  externalId        String              @id @default(uuid()) @db.Uuid
+  reporterId        String              @db.Uuid
+  kind              ContentKind
+  commentExternalId String              @db.Uuid
+  parentExternalId  String              @db.Uuid
+  reason            String
+  status            ContentReportStatus @default(OPEN)
+  reviewedById      String?             @db.Uuid
+  reviewReason      String?
+  reviewedAt        DateTime?
+  createdAt         DateTime            @default(now())
+  reporter          User                @relation("ContentReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  reviewer          User?               @relation("ContentReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@unique([reporterId, kind, commentExternalId])
+  @@index([status, createdAt])
+  @@map("content_reports")
+}
+
+model UserBlock {
+  externalId    String   @id @default(uuid()) @db.Uuid
+  ownerId       String   @db.Uuid
+  blockedUserId String   @db.Uuid
+  createdAt     DateTime @default(now())
+  owner         User     @relation("BlockOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  blockedUser   User     @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Restrict)
+
+  @@unique([ownerId, blockedUserId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
 }
 
 model AuditLog {
