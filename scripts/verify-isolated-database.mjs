@@ -10,6 +10,15 @@ import pg from "pg";
 
 const interactiveReset = process.argv.includes("--owner-password-reset-screen");
 const authenticationOnly = interactiveReset || process.argv.includes("--authentication-only");
+const selectedTests = process.argv
+  .filter((argument) => argument.startsWith("--test-file="))
+  .map((argument) => argument.slice("--test-file=".length));
+if (
+  selectedTests.some((file) => !/^tests\/[a-z0-9.-]+\.test\.ts$/.test(file) || file.includes(".."))
+)
+  throw new Error("Selected tests must be explicit files inside the workspace tests directory.");
+if (selectedTests.length && (interactiveReset || authenticationOnly))
+  throw new Error("Selected tests cannot be combined with interactive acceptance modes.");
 const resumeDatabase = process.argv
   .find((argument) => argument.startsWith("--resume-reset-database="))
   ?.slice("--resume-reset-database=".length);
@@ -148,14 +157,16 @@ try {
       [
         path.resolve("node_modules/vitest/vitest.mjs"),
         "run",
-        ...(authenticationOnly
-          ? [
-              "tests/auth-db.integration.test.ts",
-              "tests/password-reset-db.integration.test.ts",
-              "tests/initial-admin-access-db.integration.test.ts",
-              "tests/otp-delivery.test.ts",
-            ]
-          : []),
+        ...(selectedTests.length
+          ? selectedTests
+          : authenticationOnly
+            ? [
+                "tests/auth-db.integration.test.ts",
+                "tests/password-reset-db.integration.test.ts",
+                "tests/initial-admin-access-db.integration.test.ts",
+                "tests/otp-delivery.test.ts",
+              ]
+            : []),
         "--maxWorkers=1",
         "--reporter=verbose",
       ],

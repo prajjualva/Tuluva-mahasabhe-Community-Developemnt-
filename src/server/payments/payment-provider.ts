@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { assertReviewEnvironment } from "../deployment/review-environment";
 
 export type PaymentIntent = {
   paymentExternalId: string;
@@ -322,6 +323,7 @@ export function getPaymentProvider(
   environment: Record<string, string | undefined> = process.env,
   fetchImplementation?: FetchLike,
 ): PaymentProviderAvailability {
+  assertReviewEnvironment(environment);
   const provider = environment.PAYMENT_PROVIDER?.trim().toLowerCase();
   if (!provider) return { available: false, reason: "NOT_CONFIGURED" };
   if (provider !== "razorpay") return { available: false, reason: "UNSUPPORTED_PROVIDER" };

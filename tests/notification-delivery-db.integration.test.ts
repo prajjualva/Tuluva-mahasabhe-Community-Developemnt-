@@ -8,6 +8,7 @@ databaseDescribe("persistent notification delivery queue", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("queues bulk events atomically and sends once after a verified contact is available", async () => {
@@ -47,6 +48,10 @@ databaseDescribe("persistent notification delivery queue", () => {
     vi.stubEnv("EMAIL_ONLY_PILOT", "1");
     const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ id: "email-id" }));
     vi.stubGlobal("fetch", request);
+    const [clock] = await prisma.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+    // Reproduce an app host behind the database; queue rows use the database clock.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(clock.now.getTime() - 60_000);
     await expect(deliverQueuedNotifications({ relatedExternalId: marker })).resolves.toMatchObject({
       accepted: 0,
       deferred: 1,

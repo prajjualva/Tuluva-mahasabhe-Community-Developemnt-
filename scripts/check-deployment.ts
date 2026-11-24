@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { deploymentReadiness } from "../src/server/deployment/readiness";
 import { createPrivateS3Client } from "../src/server/documents/private-s3-client";
+import { isReviewWorkspace } from "../src/server/deployment/review-environment";
 
 async function main() {
   try {
@@ -36,6 +37,13 @@ async function main() {
       ["ADMIN", "ACTIVE"],
     );
     if (!administrators.rows[0]?.present) throw new Error();
+    if (isReviewWorkspace()) {
+      const fixture = await database.query(
+        "SELECT EXISTS (SELECT 1 FROM audit_logs WHERE action=$1) AS present",
+        ["REVIEW_WORKSPACE_INITIALIZED"],
+      );
+      if (!fixture.rows[0]?.present) throw new Error();
+    }
     const role = await database.query(
       "SELECT rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = current_user",
     );

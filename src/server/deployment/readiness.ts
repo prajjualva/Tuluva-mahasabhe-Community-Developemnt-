@@ -1,11 +1,13 @@
 import { isEmailOnlyPilot, otpDeliveryFor } from "../auth/otp-delivery";
+import { isReviewWorkspace, reviewEnvironmentErrors } from "./review-environment";
 
 type Environment = Record<string, string | undefined>;
 
 /** Configuration-only checks; messages deliberately contain no supplied values. */
 export function deploymentReadiness(env: Environment) {
-  const errors: string[] = [];
+  const errors: string[] = reviewEnvironmentErrors(env);
   const warnings: string[] = [];
+  const review = isReviewWorkspace(env);
   const strongSecret = (key: string) => {
     const value = env[key] ?? "";
     if (
@@ -50,7 +52,7 @@ export function deploymentReadiness(env: Environment) {
     if (
       !["postgres:", "postgresql:"].includes(db.protocol) ||
       !["require", "verify-full"].includes(db.searchParams.get("sslmode") ?? "") ||
-      /(^|[_-])test([_-]|$)/i.test(db.pathname.slice(1))
+      (!review && /(^|[_-])test([_-]|$)/i.test(db.pathname.slice(1)))
     )
       throw new Error();
   } catch {
@@ -66,18 +68,23 @@ export function deploymentReadiness(env: Environment) {
     !/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(env.AWS_ROLE_ARN ?? "")
   )
     errors.push("Vercel private storage requires a valid AWS_ROLE_ARN workload role.");
-  try {
-    if (!otpDeliveryFor("EMAIL", env))
-      errors.push("Email delivery requires a configured server-side provider.");
-    if (!env.EMAIL_PROVIDER || env.EMAIL_PROVIDER === "bridge") https("EMAIL_TRANSPORT_URL");
-    if (env.EMAIL_PROVIDER === "resend") {
-      // The gate is a production check even when invoked from a local shell.
-      otpDeliveryFor("EMAIL", { ...env, NODE_ENV: "production" });
+  if (!review)
+    try {
+      if (!otpDeliveryFor("EMAIL", env))
+        errors.push("Email delivery requires a configured server-side provider.");
+      if (!env.EMAIL_PROVIDER || env.EMAIL_PROVIDER === "bridge") https("EMAIL_TRANSPORT_URL");
+      if (env.EMAIL_PROVIDER === "resend") {
+        // The gate is a production check even when invoked from a local shell.
+        otpDeliveryFor("EMAIL", { ...env, NODE_ENV: "production" });
+      }
+    } catch {
+      errors.push("Email delivery configuration is invalid or missing a verified-domain sender.");
     }
-  } catch {
-    errors.push("Email delivery configuration is invalid or missing a verified-domain sender.");
-  }
-  if (isEmailOnlyPilot(env)) {
+  if (review) {
+    warnings.push(
+      "Isolated reviewer deployment: external messaging and scheduled jobs are disabled.",
+    );
+  } else if (isEmailOnlyPilot(env)) {
     warnings.push(
       "Phone verification and phone-number changes are disabled for the email-only pilot.",
     );
@@ -87,7 +94,9 @@ export function deploymentReadiness(env: Environment) {
       errors.push("SMS delivery requires a server-side transport token.");
   }
   if (!env.PAYMENT_PROVIDER)
-    warnings.push("Online payments are disabled until a real gateway is configured.");
+    if (review)
+      errors.push("Reviewer online payments require a complete Razorpay Test Mode configuration.");
+    else warnings.push("Online payments are disabled until a real gateway is configured.");
   else if (
     env.PAYMENT_PROVIDER !== "razorpay" ||
     !env.RAZORPAY_KEY_ID ||

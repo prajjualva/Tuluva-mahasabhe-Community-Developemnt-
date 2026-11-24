@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { readPageSession } from "../../server/http/page-session";
 import { safeInternalRedirect } from "../../server/security/request-policy";
 import LoginForm from "./login-form";
+import { reviewPortalUrl } from "../../server/deployment/review-portal";
 
 export default async function LoginPage({
   searchParams,
@@ -26,7 +27,7 @@ export default async function LoginPage({
   return (
     <>
       <PublicHeader />
-      <LoginForm emailOnly={isEmailOnlyPilot()} />
+      <LoginForm emailOnly={isEmailOnlyPilot()} reviewPortal={reviewPortalUrl()} />
     </>
   );
 }

@@ -32,17 +32,27 @@ export async function deliverQueuedNotifications(options: DeliveryScope = {}) {
   const counts = { accepted: 0, deferred: 0, failed: 0, skipped: 0 };
   const key = process.env.AUTH_SECRET;
   if (!key || key.length < 32) return counts;
-  const limit = Math.max(1, Math.min(options.limit ?? 100, 100));
-  const stopAt = Date.now() + 225_000;
-  for (const channel of channels) {
+  const configured = channels.flatMap((channel) => {
     const transport = notificationTransport(channel);
-    if (!transport) continue;
+    return transport ? [{ channel, transport }] : [];
+  });
+  if (!configured.length) return counts;
+  // Queue availability is assigned by PostgreSQL's trigger. Use that same clock:
+  // even a small application/server skew can otherwise miss a newly committed email.
+  const [clock] = await prisma.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+  if (!clock?.now || !Number.isFinite(clock.now.getTime()))
+    throw new Error("Queue clock unavailable");
+  const startedAt = performance.now();
+  const queueNow = () => new Date(clock.now.getTime() + performance.now() - startedAt);
+  const limit = Math.max(1, Math.min(options.limit ?? 100, 100));
+  const stopAt = startedAt + 225_000;
+  for (const { channel, transport } of configured) {
     const deliveries = await prisma.notificationDelivery.findMany({
       where: {
         channel,
         state: { in: ["PENDING", "SENDING"] },
         OR: [
-          { availableAt: { lte: new Date() } },
+          { availableAt: { lte: queueNow() } },
           ...(options.userId ? [{ state: "PENDING", firstAttemptAt: null }] : []),
         ],
         notification: { relatedExternalId: options.relatedExternalId, userId: options.userId },
@@ -69,8 +79,8 @@ export async function deliverQueuedNotifications(options: DeliveryScope = {}) {
       },
     });
     for (const delivery of deliveries) {
-      const now = new Date();
-      if (now.getTime() >= stopAt) return counts;
+      const now = queueNow();
+      if (performance.now() >= stopAt) return counts;
       const { user, type, template, createdAt } = delivery.notification;
       const destination = channel === "EMAIL" ? user.email : user.mobile;
       const verified = channel === "EMAIL" ? user.emailVerifiedAt : user.mobileVerifiedAt;
@@ -143,10 +153,10 @@ export async function deliverQueuedNotifications(options: DeliveryScope = {}) {
         data: {
           state: result === "RETRY" ? "PENDING" : result,
           claimToken: null,
-          ...(result === "ACCEPTED" && { acceptedAt: new Date() }),
+          ...(result === "ACCEPTED" && { acceptedAt: queueNow() }),
           ...(result === "RETRY" && {
             availableAt: new Date(
-              Date.now() + Math.min(2 ** Math.min(delivery.attempts, 6), 60) * 60_000,
+              queueNow().getTime() + Math.min(2 ** Math.min(delivery.attempts, 6), 60) * 60_000,
             ),
           }),
         },

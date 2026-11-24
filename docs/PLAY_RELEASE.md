@@ -1,5 +1,12 @@
 # Tuluva Mahasabhe Android release
 
+## Support response and reviewer isolation — 24 November 2026
+
+- Google Play support case `2-2741000042363` received a human reply with general guidance, not pre-compliance approval. It says financial-service apps require a verified Organization developer account; complete the pending D-U-N-S process and conversion, then wait at least 72 hours before submitting.
+- Reviewers need reusable Member credentials, test funds and fictional records, without real payments or access to real members' data. Do not add fictitious money or settled records to the live account. The separate persistent review deployment and acceptance steps are documented in [REVIEW_WORKSPACE.md](REVIEW_WORKSPACE.md).
+- The connected Prajwal mailbox search did not find a new D-U-N-S reply. This does not establish the contents of the TuluWorld mailbox, which was not inspected.
+- Public release remains pending. Internal release 1.0.1 remains available to its testers. Do not treat the Personal-account 12-tester/14-day path as a substitute for the Organization requirement in Google's response.
+
 Package name is org.tuluworld.communitysupport. The first signed bundle, version code 1 and version name 1.0.0, is active on the internal testing track. The application opens the production portal through a Trusted Web Activity.
 
 The updated bundle is version code **2**, version name **1.0.1**. It uses the Tuluva Mahasabhe launcher name and the supplied emblem. It has been built in CI, signed with the existing upload key and validated with bundletool. Its local handoff file is `C:/Users/Admin/Downloads/Tuluva-Mahasabhe-internal-v2.aab`. On 21 November, Play accepted this bundle and the release **Tuluva Mahasabhe 1.0.1** was published to the existing Internal testing track. Console explicitly showed **Available to internal testers**. It is not a public production release.

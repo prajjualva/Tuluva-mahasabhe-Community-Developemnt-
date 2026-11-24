@@ -1,8 +1,10 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider";
+import { assertReviewEnvironment } from "../deployment/review-environment";
 
 /** Shared by request-time document storage and the read-only deployment gate. */
 export function createPrivateS3Client(maxAttempts: number) {
+  assertReviewEnvironment();
   const roleArn = process.env.AWS_ROLE_ARN;
   if (roleArn && !/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/.test(roleArn))
     throw new Error("Private storage workload role is invalid");

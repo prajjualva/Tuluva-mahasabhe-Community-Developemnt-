@@ -1,7 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
+import { isReviewWorkspace } from "../deployment/review-environment";
 
 /** Machine-only authentication: no member cookie or URL token can authorize jobs. */
 export function isAuthorizedInternalJob(request: { method: string; headers: Headers }) {
+  // Review fixtures must never trigger collections, expiry or outbound delivery jobs.
+  if (isReviewWorkspace()) return false;
   const cron = request.method === "GET";
   if (!cron && request.method !== "POST") return false;
   const expected = cron ? process.env.CRON_SECRET : process.env.INTERNAL_JOB_SECRET;

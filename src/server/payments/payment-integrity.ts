@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../database/prisma";
+import { isReviewWorkspace } from "../deployment/review-environment";
 
 const RETRIABLE_TRANSACTION_CODES = new Set(["P2034", "P2002"]);
 
@@ -40,7 +41,7 @@ export function assertDueSettlementAllowed(due: PayableDue, settledAt = new Date
 
 /** A UUID-derived receipt number is unique without exposing database keys. */
 export function officialReceiptNumber(paymentExternalId: string, issuedAt = new Date()) {
-  return `RCP-${issuedAt.getUTCFullYear()}-${paymentExternalId.replaceAll("-", "").toUpperCase()}`;
+  return `${isReviewWorkspace() ? "TEST-" : ""}RCP-${issuedAt.getUTCFullYear()}-${paymentExternalId.replaceAll("-", "").toUpperCase()}`;
 }
 
 /**

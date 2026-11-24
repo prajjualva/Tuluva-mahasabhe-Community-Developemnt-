@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { assertReviewEnvironment } from "../deployment/review-environment";
+
+assertReviewEnvironment();
 
 async function currentRequestId() {
   try {

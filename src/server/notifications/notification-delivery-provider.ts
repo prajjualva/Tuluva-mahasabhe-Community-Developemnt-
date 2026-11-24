@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isEmailOnlyPilot } from "../auth/otp-delivery";
+import { isReviewWorkspace } from "../deployment/review-environment";
 
 export type ExternalNotificationChannel = "EMAIL" | "SMS";
 type DeliveryMessage = {
@@ -70,6 +71,7 @@ export function notificationTransport(
   environment: Record<string, string | undefined> = process.env,
   request: typeof fetch = fetch,
 ): NotificationTransport | null {
+  if (isReviewWorkspace(environment)) return null;
   const portal = portalUrl(environment);
   if (!portal) return null;
   if (channel === "EMAIL") {

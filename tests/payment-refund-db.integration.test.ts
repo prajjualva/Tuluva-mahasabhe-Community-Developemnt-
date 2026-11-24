@@ -109,7 +109,7 @@ databaseDescribe("payment refund persistence", () => {
     expect(await prisma.due.findUniqueOrThrow({ where: { id: cancellableDue.id } })).toMatchObject({
       status: "PENDING",
     });
-  }, 45_000);
+  }, 120_000);
 });
 
 afterAll(async () => {

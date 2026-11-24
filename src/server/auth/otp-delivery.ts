@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isReviewWorkspace } from "../deployment/review-environment";
 
 export type OtpDelivery = {
   destination: string;
@@ -19,6 +20,7 @@ export function otpDeliveryFor(
   channel: "EMAIL" | "SMS",
   environment: Record<string, string | undefined> = process.env,
 ): OtpDeliveryProvider | null {
+  if (isReviewWorkspace(environment)) return null;
   if (channel === "SMS" && isEmailOnlyPilot(environment)) return null;
   if (channel === "EMAIL" && environment.EMAIL_PROVIDER === "resend") {
     const key = environment.RESEND_API_KEY;

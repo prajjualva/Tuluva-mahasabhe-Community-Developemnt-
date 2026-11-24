@@ -6,7 +6,13 @@ import { safeInternalRedirect } from "../../server/security/request-policy";
 import { OtpWorkflow } from "../components/otp-workflow";
 import { AuthShell } from "../components/auth-shell";
 
-export default function LoginForm({ emailOnly }: { emailOnly: boolean }) {
+export default function LoginForm({
+  emailOnly,
+  reviewPortal,
+}: {
+  emailOnly: boolean;
+  reviewPortal?: string | null;
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +72,15 @@ export default function LoginForm({ emailOnly }: { emailOnly: boolean }) {
         {error && <p role="alert">{error}</p>}
       </form>
       <Link href="/register">Create a member account</Link>
+      {reviewPortal && (
+        <details>
+          <summary>Google Play review access</summary>
+          <p>
+            Use the separate test workspace with the reviewer credentials provided in Play Console.
+          </p>
+          <a href="/app-review">Open reviewer workspace</a>
+        </details>
+      )}
       <details>
         <summary>Use a verification code or reset your password</summary>
         <OtpWorkflow emailOnly={emailOnly} />

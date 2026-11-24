@@ -1,4 +1,5 @@
 import { applicationBrand } from "../../content/organization";
+import { isReviewWorkspace } from "../deployment/review-environment";
 
 export type OfficialReceiptDocument = {
   receiptNumber: string;
@@ -27,6 +28,7 @@ const formatMoney = (amountPaise: number) =>
  * download route authorizes ownership before this function is ever called.
  */
 export function officialReceiptHtml(receipt: OfficialReceiptDocument) {
+  const test = isReviewWorkspace() || receipt.receiptNumber.startsWith("TEST-");
   const rows: Array<[string, string]> = [
     ["Receipt number", receipt.receiptNumber],
     ["Issued", receipt.issuedAt.toISOString()],
@@ -48,12 +50,15 @@ export function officialReceiptHtml(receipt: OfficialReceiptDocument) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(receipt.receiptNumber)}</title>
 <style>body{font-family:Arial,sans-serif;color:#14261d;margin:48px;max-width:720px}h1{margin-bottom:4px}.eyebrow{color:#3b6b4e;font-weight:700;letter-spacing:.08em;font-size:12px}table{border-collapse:collapse;width:100%;margin-top:28px}th,td{padding:12px;border-bottom:1px solid #cbd5cf;text-align:left;vertical-align:top}th{width:35%;color:#395044}footer{margin-top:32px;font-size:12px;color:#53645a}@media print{body{margin:24px}}</style>
-</head><body><p class="eyebrow">${escapeHtml(applicationBrand.fullName)}</p><h1>Official payment receipt</h1><p>${receipt.status === "SUCCEEDED" ? "This document records a successful Foundation payment." : receipt.status === "PENDING" ? "Cash received by Coordinator. Foundation verification is pending; the related due is not yet paid." : "This payment is not currently settled. See the payment status below."}</p><table>${table}</table><footer>Keep this receipt for your Foundation records.</footer></body></html>`;
+</head><body><p class="eyebrow">${escapeHtml(applicationBrand.fullName)}</p><h1>${test ? "TEST payment receipt — no real money" : "Official payment receipt"}</h1><p>${test ? "Isolated reviewer workspace. This receipt has no monetary value and does not establish real membership or support eligibility." : receipt.status === "SUCCEEDED" ? "This document records a successful Foundation payment." : receipt.status === "PENDING" ? "Cash received by Coordinator. Foundation verification is pending; the related due is not yet paid." : "This payment is not currently settled. See the payment status below."}</p><table>${table}</table><footer>${test ? "TEST ONLY — not a Foundation financial record." : "Keep this receipt for your Foundation records."}</footer></body></html>`;
 }
 
 export function officialReceiptShareText(receipt: OfficialReceiptDocument) {
   return [
-    applicationBrand.name + " — Official payment receipt",
+    applicationBrand.name +
+      (isReviewWorkspace() || receipt.receiptNumber.startsWith("TEST-")
+        ? " — TEST receipt, no real money or membership entitlement"
+        : " — Official payment receipt"),
     `Receipt: ${receipt.receiptNumber}`,
     `Member: ${receipt.member?.fullName ?? "Member"}`,
     `Purpose: ${receipt.due?.purpose ?? "Foundation payment"}`,

@@ -1892,3 +1892,17 @@ button:disabled {
   width: auto;
   flex: 0 0 auto;
 }
+/* Kept visible in screenshots and on phones; never shown in the live workspace. */
+.review-workspace-banner {
+  padding: 0.65rem 1rem;
+  background: #fff0c2;
+  color: #4f3500;
+  text-align: center;
+  font-size: 0.85rem;
+}
+.review-workspace-banner a {
+  display: inline-block;
+  margin-left: 0.75rem;
+  color: inherit;
+  text-decoration: underline;
+}

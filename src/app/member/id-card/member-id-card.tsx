@@ -37,6 +37,7 @@ function wrapLines(context: CanvasRenderingContext2D, text: string, width: numbe
 }
 
 type CardProps = {
+  testOnly?: boolean;
   name: string;
   memberId: string;
   memberSince: string;
@@ -178,6 +179,16 @@ export function MemberIdCard(props: CardProps) {
       context.fillText("tuluworld@gmail.com", 80, faceHeight - 37);
       context.restore();
 
+      if (props.testOnly) {
+        context.fillStyle = "#7c2600";
+        context.font = "700 30px system-ui, sans-serif";
+        context.textAlign = "center";
+        context.fillText(
+          "TEST ONLY — NO REAL MEMBERSHIP ENTITLEMENT",
+          canvas.width / 2,
+          canvas.height - 12,
+        );
+      }
       const image = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/png"),
       );
@@ -200,6 +211,9 @@ export function MemberIdCard(props: CardProps) {
 
   return (
     <>
+      {props.testOnly && (
+        <p role="note">TEST ID card — fictional Member, no real membership entitlement.</p>
+      )}
       <section className="member-id-set" aria-label="Member ID card front and back">
         <section className="member-id-face member-id-front" aria-label="ID card front">
           <header className="member-id-heading">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePagePermission } from "../../../server/http/page-authorize";
 import { readOwnMemberCard } from "../../../server/members/member-card-service";
 import { MemberIdCard } from "./member-id-card";
+import { isReviewWorkspace } from "../../../server/deployment/review-environment";
 
 export default async function MemberIdCardPage() {
   const actor = await requirePagePermission("member:profile:read", "/member/id-card");
@@ -15,6 +16,7 @@ export default async function MemberIdCardPage() {
       <h1>Member ID card</h1>
       {profile.photoUpdatedAt ? (
         <MemberIdCard
+          testOnly={isReviewWorkspace()}
           name={profile.fullName}
           memberId={profile.externalId}
           address={profile.address}
