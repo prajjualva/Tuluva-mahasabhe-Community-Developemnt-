@@ -4,7 +4,7 @@ Google's current requirement for this Personal developer account is **at least 1
 
 Source checked 23 November 2026: https://support.google.com/googleplay/android-developer/answer/14151465.
 
-The 12-person/14-day test does not replace the requirement to use the correct developer account type. Google requires Organization registration for financial services: https://support.google.com/googleplay/android-developer/answer/10788890. A human support request is pending about the Foundation's specific features and reviewer access. Do not assume that completing a Personal-account test alone permits this app's public release, or that organization verification is a timing workaround.
+The 12-person/14-day test does not replace the requirement to use the correct developer account type. Google requires Organization registration for financial services: https://support.google.com/googleplay/android-developer/answer/10788890. Support case `2-2741000042363` has now received general human guidance: complete D-U-N-S and Organization conversion, then wait at least 72 hours after conversion before submitting. This is not app approval. Do not assume a Personal-account test alone permits this app's public release. See [the separate reviewer workspace](REVIEW_WORKSPACE.md) for sample records and test payment access without sharing live members' data.
 
 ## Before inviting people
 

@@ -57,6 +57,8 @@ node scripts/verify-review-workspace.mjs
 
 Automated assertions do not replace hosted Razorpay webhook or Android-device acceptance.
 
+For a temporary loopback-only screen check, finish `npm run build:verify` first and append `--screen` to the helper command. It serves that build using a distinct localhost hostname, writes a private temporary sign-in handoff and waits for `stop` on stdin. Do not rebuild `.next-validation` while this screen is running. Stopping the runner removes its disposable database and private files; verify cleanup after an interrupted session.
+
 ## Connect the installed app
 
 After hosted acceptance, set live `PLAY_REVIEW_URL=https://tuluva-mahasabhe-review.vercel.app/`. The login screen then offers reviewer access; `/app-review` redirects to the fixed test login without forwarding cookies, tokens or passwords. Only two explicitly allowlisted review hosts are accepted.
