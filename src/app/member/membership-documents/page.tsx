@@ -31,7 +31,7 @@ export default async function MembershipDocuments() {
         <article>
           <h2>Your membership pack</h2>
           <p>Certificate {pack.certificateNumber}</p>
-          <div className="action-row">
+          <div className="membership-document-actions">
             {(
               [
                 ["id-card", "Download ID card"],

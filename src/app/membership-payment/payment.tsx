@@ -174,7 +174,7 @@ export function MembershipPayment({ initial, emailOnly }: { initial: State; emai
               ? "Your welcome pack is queued for email delivery."
               : "Verify your email below to receive them securely."}
           </p>
-          <div className="action-row">
+          <div className="onboarding-actions">
             <Link className="button-link" href="/member">
               Open my dashboard
             </Link>

@@ -1943,6 +1943,48 @@ button:disabled {
 .onboarding-content article {
   margin: 24px 0;
 }
+.membership-document-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.membership-document-actions a,
+.onboarding-actions a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 12px 16px;
+  border: 1px solid #cbd8d1;
+  border-radius: 10px;
+  background: #f4f8f5;
+  color: #163f33;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  text-align: center;
+}
+.membership-document-actions a:hover,
+.onboarding-actions a:hover {
+  background: #e9f1ec;
+  border-color: #507964;
+}
+.membership-document-actions a:focus-visible,
+.onboarding-actions a:focus-visible {
+  outline: 3px solid #b68532;
+  outline-offset: 3px;
+}
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.onboarding-actions .button-link {
+  background: #163f33;
+  color: #fff;
+}
 .onboarding-content article > button {
   margin: 6px 10px 10px 0;
 }
