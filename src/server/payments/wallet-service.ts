@@ -105,100 +105,103 @@ export async function payDueFromWallet(
   actorId: string,
   idempotencyKey: string,
 ) {
-  return runSerializablePaymentTransaction(async (tx) => {
-    const prior = await tx.payment.findUnique({
-      where: { idempotencyKey },
-      include: { receipt: true },
-    });
-    if (prior) {
-      if (prior.memberId !== memberId || prior.dueId !== dueId || prior.method !== "WALLET")
-        throw new Error("Idempotency key is already in use");
-      return { payment: prior, entry: null, receipt: prior.receipt, alreadyProcessed: true };
-    }
-    const due = await tx.due.findUnique({ where: { id: dueId } });
-    if (!due || due.memberId !== memberId) throw new Error("Due is not payable");
-    assertDuePayable(due);
-    await assertNoPendingPaymentForDue(tx, due.id, idempotencyKey);
-    const wallet = await tx.wallet.findUnique({ where: { memberId } });
-    if (!wallet || wallet.balancePaise < due.amountPaise)
-      throw new Error("Insufficient wallet balance");
-    const changed = await tx.wallet.updateMany({
-      where: { id: wallet.id, version: wallet.version, balancePaise: { gte: due.amountPaise } },
-      data: { balancePaise: { decrement: due.amountPaise }, version: { increment: 1 } },
-    });
-    if (changed.count !== 1) throw new Error("Wallet balance changed; retry payment");
-    const updated = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-    const payment = await tx.payment.create({
-      data: {
+  return runSerializablePaymentTransaction(
+    async (tx) => {
+      const prior = await tx.payment.findUnique({
+        where: { idempotencyKey },
+        include: { receipt: true },
+      });
+      if (prior) {
+        if (prior.memberId !== memberId || prior.dueId !== dueId || prior.method !== "WALLET")
+          throw new Error("Idempotency key is already in use");
+        return { payment: prior, entry: null, receipt: prior.receipt, alreadyProcessed: true };
+      }
+      const due = await tx.due.findUnique({ where: { id: dueId } });
+      if (!due || due.memberId !== memberId) throw new Error("Due is not payable");
+      assertDuePayable(due);
+      await assertNoPendingPaymentForDue(tx, due.id, idempotencyKey);
+      const wallet = await tx.wallet.findUnique({ where: { memberId } });
+      if (!wallet || wallet.balancePaise < due.amountPaise)
+        throw new Error("Insufficient wallet balance");
+      const changed = await tx.wallet.updateMany({
+        where: { id: wallet.id, version: wallet.version, balancePaise: { gte: due.amountPaise } },
+        data: { balancePaise: { decrement: due.amountPaise }, version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw new Error("Wallet balance changed; retry payment");
+      const updated = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      const payment = await tx.payment.create({
+        data: {
+          memberId,
+          dueId,
+          amountPaise: due.amountPaise,
+          method: "WALLET",
+          status: "SUCCEEDED",
+          idempotencyKey,
+        },
+      });
+      const entry = await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          direction: "DEBIT",
+          amountPaise: due.amountPaise,
+          balanceAfterPaise: updated.balancePaise,
+          purpose: due.purpose,
+          relatedExternalId: payment.externalId,
+        },
+      });
+      await tx.due.update({ where: { id: dueId }, data: { status: "PAID", paidAt: new Date() } });
+      if (due.purpose === "PLAN_REGISTRATION" && due.planId)
+        await advancePlanAfterRegistrationPayment(tx, due.planId);
+      if (due.purpose === "MEMBERSHIP") await refreshMembershipFinancialStatus(tx, memberId);
+      const receipt = await tx.receipt.create({
+        data: {
+          paymentId: payment.id,
+          receiptNumber: officialReceiptNumber(payment.externalId),
+        },
+      });
+      if (due.purpose === "MEMBERSHIP") await issueMembershipPackInTransaction(tx, payment.id);
+      await tx.auditLog.create({
+        data: {
+          actorId,
+          action: "WALLET_PAYMENT_SETTLED",
+          entityType: "Payment",
+          entityId: payment.id,
+        },
+      });
+      await tx.foundationLedger.create({
+        data: {
+          direction: "CREDIT",
+          amountPaise: due.amountPaise,
+          purpose: due.purpose,
+          relatedExternalId: payment.externalId,
+          authorizedActorId: actorId,
+          status: "SUCCEEDED",
+        },
+      });
+      await notifyMemberByMemberIdInTransaction(tx, {
         memberId,
-        dueId,
-        amountPaise: due.amountPaise,
-        method: "WALLET",
-        status: "SUCCEEDED",
-        idempotencyKey,
-      },
-    });
-    const entry = await tx.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        direction: "DEBIT",
-        amountPaise: due.amountPaise,
-        balanceAfterPaise: updated.balancePaise,
-        purpose: due.purpose,
+        type: "WALLET_PAYMENT",
+        title: "Wallet payment received",
+        body: `Your Foundation Wallet payment was applied successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`,
+        template: "WALLET_PAYMENT_SETTLED",
         relatedExternalId: payment.externalId,
-      },
-    });
-    await tx.due.update({ where: { id: dueId }, data: { status: "PAID", paidAt: new Date() } });
-    if (due.purpose === "PLAN_REGISTRATION" && due.planId)
-      await advancePlanAfterRegistrationPayment(tx, due.planId);
-    if (due.purpose === "MEMBERSHIP") await refreshMembershipFinancialStatus(tx, memberId);
-    const receipt = await tx.receipt.create({
-      data: {
-        paymentId: payment.id,
-        receiptNumber: officialReceiptNumber(payment.externalId),
-      },
-    });
-    if (due.purpose === "MEMBERSHIP") await issueMembershipPackInTransaction(tx, payment.id);
-    await tx.auditLog.create({
-      data: {
-        actorId,
-        action: "WALLET_PAYMENT_SETTLED",
-        entityType: "Payment",
-        entityId: payment.id,
-      },
-    });
-    await tx.foundationLedger.create({
-      data: {
-        direction: "CREDIT",
-        amountPaise: due.amountPaise,
-        purpose: due.purpose,
+        payload: { receiptNumber: receipt.receiptNumber, duePurpose: due.purpose },
+        idempotencyKey: `wallet-payment:${payment.id}`,
+      });
+      await notifyMemberByMemberIdInTransaction(tx, {
+        memberId,
+        type: "RECEIPT_GENERATED",
+        title: "Official receipt generated",
+        body: `Official receipt ${receipt.receiptNumber} is ready for your Wallet payment.`,
+        template: "RECEIPT_GENERATED",
         relatedExternalId: payment.externalId,
-        authorizedActorId: actorId,
-        status: "SUCCEEDED",
-      },
-    });
-    await notifyMemberByMemberIdInTransaction(tx, {
-      memberId,
-      type: "WALLET_PAYMENT",
-      title: "Wallet payment received",
-      body: `Your Foundation Wallet payment was applied successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`,
-      template: "WALLET_PAYMENT_SETTLED",
-      relatedExternalId: payment.externalId,
-      payload: { receiptNumber: receipt.receiptNumber, duePurpose: due.purpose },
-      idempotencyKey: `wallet-payment:${payment.id}`,
-    });
-    await notifyMemberByMemberIdInTransaction(tx, {
-      memberId,
-      type: "RECEIPT_GENERATED",
-      title: "Official receipt generated",
-      body: `Official receipt ${receipt.receiptNumber} is ready for your Wallet payment.`,
-      template: "RECEIPT_GENERATED",
-      relatedExternalId: payment.externalId,
-      payload: { receiptNumber: receipt.receiptNumber },
-      idempotencyKey: `receipt:${receipt.id}:generated`,
-    });
-    return { payment, entry, receipt, alreadyProcessed: false };
-  });
+        payload: { receiptNumber: receipt.receiptNumber },
+        idempotencyKey: `receipt:${receipt.id}:generated`,
+      });
+      return { payment, entry, receipt, alreadyProcessed: false };
+    },
+    { timeoutMs: 60_000 },
+  );
 }
 
 /**

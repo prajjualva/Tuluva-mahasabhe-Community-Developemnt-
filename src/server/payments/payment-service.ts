@@ -111,8 +111,9 @@ export async function settlePayment(
   providerReference: string,
   settledAt = new Date(),
 ) {
-  return runSerializablePaymentTransaction((tx) =>
-    settlePaymentInTransaction(tx, paymentId, actorId, providerReference, settledAt),
+  return runSerializablePaymentTransaction(
+    (tx) => settlePaymentInTransaction(tx, paymentId, actorId, providerReference, settledAt),
+    { timeoutMs: 60_000 },
   );
 }
 

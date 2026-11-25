@@ -30,155 +30,158 @@ export async function administerInitialMembership(actorId: string, raw: unknown)
     input.action === "RECORD_PAYMENT"
       ? createHash("sha256").update(input.reference.toUpperCase()).digest("hex")
       : null;
-  return runSerializablePaymentTransaction(async (tx) => {
-    const admin = await tx.user.findFirst({
-      where: {
-        id: actorId,
-        status: "ACTIVE",
-        roles: {
-          some: {
-            active: true,
-            role: { permissions: { some: { permission: { code: "admin:*" } } } },
+  return runSerializablePaymentTransaction(
+    async (tx) => {
+      const admin = await tx.user.findFirst({
+        where: {
+          id: actorId,
+          status: "ACTIVE",
+          roles: {
+            some: {
+              active: true,
+              role: { permissions: { some: { permission: { code: "admin:*" } } } },
+            },
           },
         },
-      },
-      select: { id: true },
-    });
-    if (!admin) throw new Error("Forbidden");
-    const member = await tx.member.findUniqueOrThrow({
-      where: { externalId: input.memberExternalId },
-      include: { user: { select: { status: true } } },
-    });
-    if (["CLOSED", "DECEASED"].includes(member.status) || member.user.status !== "ACTIVE")
-      throw new Error("Member access cannot be changed in this state");
-    if (input.action === "GRANT") {
-      const replay = await tx.membershipGrant.findUnique({
-        where: { idempotencyKey: input.idempotencyKey },
-        include: { pack: { select: { externalId: true } } },
+        select: { id: true },
       });
-      if (replay) {
-        if (replay.memberId !== member.id || replay.reason !== input.reason)
-          throw new Error("Idempotency key is already in use");
+      if (!admin) throw new Error("Forbidden");
+      const member = await tx.member.findUniqueOrThrow({
+        where: { externalId: input.memberExternalId },
+        include: { user: { select: { status: true } } },
+      });
+      if (["CLOSED", "DECEASED"].includes(member.status) || member.user.status !== "ACTIVE")
+        throw new Error("Member access cannot be changed in this state");
+      if (input.action === "GRANT") {
+        const replay = await tx.membershipGrant.findUnique({
+          where: { idempotencyKey: input.idempotencyKey },
+          include: { pack: { select: { externalId: true } } },
+        });
+        if (replay) {
+          if (replay.memberId !== member.id || replay.reason !== input.reason)
+            throw new Error("Idempotency key is already in use");
+          return {
+            memberExternalId: member.externalId,
+            status: "FEE_EXEMPT",
+            packExternalId: replay.pack?.externalId,
+          };
+        }
+      } else {
+        const replay = await tx.payment.findUnique({
+          where: { idempotencyKey: input.idempotencyKey },
+          include: { receipt: true, due: { select: { paidAt: true } } },
+        });
+        if (replay) {
+          const evidence = await tx.auditLog.findFirst({
+            where: { entityId: replay.id, action: "ADMIN_MEMBERSHIP_PAYMENT_CONFIRMED" },
+            select: { reason: true },
+          });
+          if (
+            replay.memberId !== member.id ||
+            replay.method !== "MANUAL" ||
+            replay.providerReference !== `admin-membership:${referenceHash}` ||
+            replay.due?.paidAt?.getTime() !== new Date(input.receivedAt).getTime() ||
+            evidence?.reason !== input.reason
+          )
+            throw new Error("Idempotency key is already in use");
+          return {
+            memberExternalId: member.externalId,
+            status: replay.status,
+            receiptNumber: replay.receipt?.receiptNumber,
+          };
+        }
+      }
+      const due = member.registrationDueId
+        ? await tx.due.findUniqueOrThrow({ where: { id: member.registrationDueId } })
+        : await tx.due.findFirst({
+            where: { memberId: member.id, purpose: "MEMBERSHIP" },
+            orderBy: { createdAt: "asc" },
+          });
+      if (!due || due.memberId !== member.id || due.purpose !== "MEMBERSHIP")
+        throw new Error("Initial membership due not found");
+      assertDuePayable(due);
+      if (await tx.payment.count({ where: { dueId: due.id, status: "PENDING" } }))
+        throw new Error("Resolve the pending payment first");
+      if (!member.registrationDueId)
+        await tx.member.update({ where: { id: member.id }, data: { registrationDueId: due.id } });
+      if (input.action === "GRANT") {
+        const grant = await tx.membershipGrant.create({
+          data: {
+            memberId: member.id,
+            approvedById: actorId,
+            reason: input.reason,
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
+        await tx.due.update({ where: { id: due.id }, data: { status: "WAIVED" } });
+        await refreshMembershipFinancialStatus(tx, member.id);
+        const pack = await issueGrantedMembershipPackInTransaction(tx, grant.id);
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            actorRole: "ADMIN",
+            action: "ADMIN_INITIAL_MEMBERSHIP_GRANTED",
+            entityType: "Member",
+            entityId: member.id,
+            reason: input.reason,
+            beforeState: { dueStatus: due.status },
+            afterState: {
+              dueExternalId: due.externalId,
+              waivedAmountPaise: due.amountPaise,
+              grantExternalId: grant.externalId,
+              approvedAt: grant.approvedAt.toISOString(),
+              noMoneyCollected: true,
+            },
+          },
+        });
         return {
           memberExternalId: member.externalId,
           status: "FEE_EXEMPT",
-          packExternalId: replay.pack?.externalId,
+          packExternalId: pack.externalId,
         };
       }
-    } else {
-      const replay = await tx.payment.findUnique({
-        where: { idempotencyKey: input.idempotencyKey },
-        include: { receipt: true, due: { select: { paidAt: true } } },
-      });
-      if (replay) {
-        const evidence = await tx.auditLog.findFirst({
-          where: { entityId: replay.id, action: "ADMIN_MEMBERSHIP_PAYMENT_CONFIRMED" },
-          select: { reason: true },
-        });
-        if (
-          replay.memberId !== member.id ||
-          replay.method !== "MANUAL" ||
-          replay.providerReference !== `admin-membership:${referenceHash}` ||
-          replay.due?.paidAt?.getTime() !== new Date(input.receivedAt).getTime() ||
-          evidence?.reason !== input.reason
-        )
-          throw new Error("Idempotency key is already in use");
-        return {
-          memberExternalId: member.externalId,
-          status: replay.status,
-          receiptNumber: replay.receipt?.receiptNumber,
-        };
-      }
-    }
-    const due = member.registrationDueId
-      ? await tx.due.findUniqueOrThrow({ where: { id: member.registrationDueId } })
-      : await tx.due.findFirst({
-          where: { memberId: member.id, purpose: "MEMBERSHIP" },
-          orderBy: { createdAt: "asc" },
-        });
-    if (!due || due.memberId !== member.id || due.purpose !== "MEMBERSHIP")
-      throw new Error("Initial membership due not found");
-    assertDuePayable(due);
-    if (await tx.payment.count({ where: { dueId: due.id, status: "PENDING" } }))
-      throw new Error("Resolve the pending payment first");
-    if (!member.registrationDueId)
-      await tx.member.update({ where: { id: member.id }, data: { registrationDueId: due.id } });
-    if (input.action === "GRANT") {
-      const grant = await tx.membershipGrant.create({
+      const receivedAt = new Date(input.receivedAt);
+      if (receivedAt > new Date()) throw new Error("Received date cannot be in the future");
+      const payment = await tx.payment.create({
         data: {
           memberId: member.id,
-          approvedById: actorId,
-          reason: input.reason,
+          dueId: due.id,
+          amountPaise: due.amountPaise,
+          method: "MANUAL",
           idempotencyKey: input.idempotencyKey,
         },
       });
-      await tx.due.update({ where: { id: due.id }, data: { status: "WAIVED" } });
-      await refreshMembershipFinancialStatus(tx, member.id);
-      const pack = await issueGrantedMembershipPackInTransaction(tx, grant.id);
+      const settled = await settlePaymentInTransaction(
+        tx,
+        payment.id,
+        actorId,
+        `admin-membership:${referenceHash}`,
+        receivedAt,
+      );
       await tx.auditLog.create({
         data: {
           actorId,
           actorRole: "ADMIN",
-          action: "ADMIN_INITIAL_MEMBERSHIP_GRANTED",
-          entityType: "Member",
-          entityId: member.id,
+          action: "ADMIN_MEMBERSHIP_PAYMENT_CONFIRMED",
+          entityType: "Payment",
+          entityId: payment.id,
           reason: input.reason,
-          beforeState: { dueStatus: due.status },
           afterState: {
-            dueExternalId: due.externalId,
-            waivedAmountPaise: due.amountPaise,
-            grantExternalId: grant.externalId,
-            approvedAt: grant.approvedAt.toISOString(),
-            noMoneyCollected: true,
+            memberExternalId: member.externalId,
+            amountPaise: due.amountPaise,
+            reference: input.reference,
+            receivedAt: receivedAt.toISOString(),
           },
         },
       });
       return {
         memberExternalId: member.externalId,
-        status: "FEE_EXEMPT",
-        packExternalId: pack.externalId,
+        status: settled.payment.status,
+        receiptNumber: settled.receipt?.receiptNumber,
       };
-    }
-    const receivedAt = new Date(input.receivedAt);
-    if (receivedAt > new Date()) throw new Error("Received date cannot be in the future");
-    const payment = await tx.payment.create({
-      data: {
-        memberId: member.id,
-        dueId: due.id,
-        amountPaise: due.amountPaise,
-        method: "MANUAL",
-        idempotencyKey: input.idempotencyKey,
-      },
-    });
-    const settled = await settlePaymentInTransaction(
-      tx,
-      payment.id,
-      actorId,
-      `admin-membership:${referenceHash}`,
-      receivedAt,
-    );
-    await tx.auditLog.create({
-      data: {
-        actorId,
-        actorRole: "ADMIN",
-        action: "ADMIN_MEMBERSHIP_PAYMENT_CONFIRMED",
-        entityType: "Payment",
-        entityId: payment.id,
-        reason: input.reason,
-        afterState: {
-          memberExternalId: member.externalId,
-          amountPaise: due.amountPaise,
-          reference: input.reference,
-          receivedAt: receivedAt.toISOString(),
-        },
-      },
-    });
-    return {
-      memberExternalId: member.externalId,
-      status: settled.payment.status,
-      receiptNumber: settled.receipt?.receiptNumber,
-    };
-  });
+    },
+    { timeoutMs: 60_000 },
+  );
 }
 
 export async function listInitialMembershipQueue(search: string) {
