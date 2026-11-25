@@ -21,6 +21,8 @@ The Member, Coordinator and Admin workspaces check only the signed-in user's pay
 
 The reminder appears on a workspace visit/reload while dues remain. Later/Escape/Close dismisses the same obligations for that mounted workspace, avoiding repetition on every menu click; new or changed obligations can appear after a fresh check. Visible workspaces refresh on return and once per minute. Payment/plan/wallet/remittance screens are excluded to avoid interrupting a payment. No reminder action initiates a charge or changes financial records.
 
+Source `a2d9559` passed [CI 45630730718](https://github.com/prajjualva/Tuluva-mahasabhe-Community-Developemnt-/actions/runs/45630730718): 366 tests across 88 files, zero skips, and all schema/type/lint/format/audit/build checks. Local phone acceptance at 390px verified the actual modal, dismissal across navigation, reopening on reload and the Continue payment destination with no interrupting modal on the dues screen. No payment was submitted. Deployment `dpl_8LdoWx7rMDvJsjzwjanMrQS895yw` passed the existing production preflight and was promoted on 25 November 2026. Anonymous dues and Admin payment requests still return 403.
+
 ## Membership documents and email
 
 Verified initial settlement creates one immutable issue snapshot per payment; an approved fee exemption creates one issue snapshot per grant. The snapshot contains the Member's name, address, mobile, photo and original-cycle validity, with a unique certificate number. It does not include passwords, bank data or staff reasons. Document generation happens outside financial transactions.
