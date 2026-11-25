@@ -47,6 +47,9 @@ describe("signed-in page navigation", () => {
       coordinatorActive: testCase.active,
       coordinatorSuspended: !testCase.active,
       memberUnavailable: false,
+      onboardingPaymentRequired: false,
+      registrationDueId: null,
+      registrationDueExternalId: null,
     });
 
     expect((await readPageSession())?.dashboard).toBe(testCase.destination);

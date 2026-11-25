@@ -8,14 +8,23 @@ type DeliveryMessage = {
   type: string;
   template: string;
   idempotencyKey: string;
+  attachments?: Array<{ filename: string; content: string; content_type: "application/pdf" }>;
 };
 export type DeliveryResult = "ACCEPTED" | "RETRY" | "FAILED";
 export type NotificationTransport = (message: DeliveryMessage) => Promise<DeliveryResult>;
 
 const summaries: Record<string, [string, string]> = {
-  REGISTRATION: [
+  MEMBERSHIP_GRANTED: [
     "Welcome to Tuluva Mahasabhe",
-    "Your registration was received. Sign in to review your membership and any dues. If you did not register, ignore this email.",
+    "Foundation Admin approved your initial membership with a fee exemption. Your ID card, membership certificate and exemption record are attached. No payment was collected. Community Support Plan approval and support eligibility follow separate Foundation rules.",
+  ],
+  REGISTRATION: [
+    "Tuluva Mahasabhe account created",
+    "Your registration was received. Sign in to complete your initial membership payment. If you did not register, ignore this email.",
+  ],
+  MEMBERSHIP_ACTIVATED: [
+    "Welcome to Tuluva Mahasabhe",
+    "Your initial membership payment is verified. Welcome to the Tuluva Mahasabhe community development program of Tuluworld Foundation. Your membership ID card, certificate and payment receipt are attached. Your Community Support Plan approval and support eligibility follow separate Foundation rules.",
   ],
   COORDINATOR_ASSIGNED: [
     "Coordinator assignment",
@@ -84,8 +93,13 @@ export function notificationTransport(
       /(^|[.@])resend\.dev$/i.test(sender.data)
     )
       return null;
-    return async ({ destination, type, template, idempotencyKey }) => {
+    return async ({ destination, type, template, idempotencyKey, attachments }) => {
       if (!z.string().email().safeParse(destination).success) return "FAILED";
+      if (
+        ["MEMBERSHIP_ACTIVATED", "MEMBERSHIP_GRANTED"].includes(type) &&
+        attachments?.length !== 3
+      )
+        return "FAILED";
       // External messages use controlled copy. Inbox titles, bodies and payloads can contain
       // private details or staff-entered text and never leave the member portal.
       const copyKey = template === "COORDINATOR_APPOINTMENT" ? template : type;
@@ -108,6 +122,10 @@ export function notificationTransport(
             to: [destination],
             subject,
             text: `${summary}\n\nSign in to TuluWorld\n${portal}`,
+            ...(["MEMBERSHIP_ACTIVATED", "MEMBERSHIP_GRANTED"].includes(type) &&
+            attachments?.length === 3
+              ? { attachments }
+              : {}),
           }),
           signal: AbortSignal.timeout(8000),
           redirect: "error",

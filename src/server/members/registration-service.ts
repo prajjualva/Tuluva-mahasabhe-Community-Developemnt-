@@ -1,5 +1,5 @@
 import { hashPassword } from "../auth/password";
-import { registrationInput, type RegistrationInput } from "./member-service";
+import { registrationInput } from "./member-service";
 import { addUtcCalendarMonths } from "../../domain/calendar";
 import { effectiveSchemeNumber } from "../database/scheme-policy";
 import { membershipCycleKey } from "../membership/membership-lifecycle-service";
@@ -7,8 +7,9 @@ import { createInAppNotificationInTransaction } from "../notifications/notificat
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
 
 /** Creates identity, member, membership history, and first ₹369 due atomically. */
-export async function registerMemberPersistently(raw: RegistrationInput) {
+export async function registerMemberPersistently(raw: unknown, photo: Buffer) {
   const input = registrationInput.parse(raw);
+  if (!photo?.length || photo.length > 256 * 1024) throw new Error("A profile photo is required");
   const passwordHash = await hashPassword(input.password);
   return runSerializablePaymentTransaction(async (tx) => {
     const coordinator = await tx.coordinator.findFirst({
@@ -36,6 +37,7 @@ export async function registerMemberPersistently(raw: RegistrationInput) {
         fullName: input.fullName,
         address: input.address,
         status: "GRACE",
+        profilePhoto: { create: { bytes: new Uint8Array(photo) } },
       },
     });
     await tx.referral.create({ data: { coordinatorId: coordinator.id, memberId: member.id } });
@@ -66,6 +68,7 @@ export async function registerMemberPersistently(raw: RegistrationInput) {
       },
     });
     await tx.userRole.create({ data: { userId: user.id, roleId: memberRole.id } });
+    await tx.member.update({ where: { id: member.id }, data: { registrationDueId: due.id } });
     await tx.auditLog.create({
       data: {
         actorRole: "SYSTEM",
@@ -75,14 +78,16 @@ export async function registerMemberPersistently(raw: RegistrationInput) {
         afterState: {
           memberExternalId: member.externalId,
           membershipDueExternalId: due.externalId,
+          onboardingPolicyVersion: 1,
+          photoProvided: true,
         },
       },
     });
     await createInAppNotificationInTransaction(tx, {
       userId: user.id,
       type: "REGISTRATION",
-      title: "Welcome to Community Support Foundation",
-      body: "Your member account has been created. Your membership payment is available in the member portal.",
+      title: "Your member account has been created",
+      body: "Complete your initial membership payment to open your member workspace. Your welcome pack will be issued after verified payment.",
       template: "MEMBER_REGISTERED",
       relatedExternalId: member.externalId,
       payload: { memberExternalId: member.externalId, membershipDueExternalId: due.externalId },
@@ -123,6 +128,7 @@ export async function registerMemberPersistently(raw: RegistrationInput) {
       idempotencyKey: `member-mobile-verification:${member.id}`,
     });
     return {
+      userId: user.id,
       memberExternalId: member.externalId,
       membershipDueExternalId: due.externalId,
       membershipDueAt: due.dueAt,

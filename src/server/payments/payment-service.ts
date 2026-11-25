@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { refreshMembershipFinancialStatus } from "../membership/membership-lifecycle-service";
 import { prisma } from "../database/prisma";
+import { issueMembershipPackInTransaction } from "../members/membership-pack-service";
 import { advancePlanAfterRegistrationPayment } from "../plans/plan-service";
 import { createInAppNotificationInTransaction } from "../notifications/notification-service";
 import { flagUnappliedFunds } from "./unapplied-payment-service";
@@ -110,114 +111,126 @@ export async function settlePayment(
   providerReference: string,
   settledAt = new Date(),
 ) {
-  return runSerializablePaymentTransaction(async (tx) => {
-    const existing = await tx.payment.findUnique({
-      where: { id: paymentId },
-      include: { receipt: true, due: true, member: { select: { userId: true } } },
-    });
-    if (!existing) throw new Error("Payment not found");
-    if (existing.status === "SUCCEEDED") {
-      if (existing.providerReference !== providerReference)
-        throw new Error("Payment capture reference does not match the settled payment");
-      return { payment: existing, receipt: existing.receipt, alreadySettled: true };
-    }
-    // Older failed webhooks closed the whole order and could compensate a split wallet debit.
-    // A later verified capture on such an order must be recorded for refund review.
-    const previouslyFailedOrder =
-      existing.status === "FAILED" &&
-      existing.method === "ONLINE" &&
-      Boolean(existing.providerOrderId) &&
-      Boolean(existing.due);
-    if (existing.status !== "PENDING" && !previouslyFailedOrder)
-      throw new Error("Payment is not pending");
+  return runSerializablePaymentTransaction((tx) =>
+    settlePaymentInTransaction(tx, paymentId, actorId, providerReference, settledAt),
+  );
+}
 
-    let appliedToDue = !previouslyFailedOrder;
-    if (existing.due && appliedToDue) {
-      try {
-        assertDueSettlementAllowed(existing.due, settledAt);
-      } catch (error) {
-        if (existing.method !== "ONLINE") throw error;
-        // A signed capture is real money even after waiver, death, closure or
-        // expiry. Record it, but never resurrect the obligation or entitlement.
-        appliedToDue = false;
-      }
-    }
-    if (existing.due && appliedToDue) {
-      const claimed = await tx.due.updateMany({
-        where: {
-          id: existing.due.id,
-          status: { in: ["PENDING", "OVERDUE", "EXPIRED"] },
-        },
-        data: { status: "PAID", paidAt: settledAt },
-      });
-      if (claimed.count !== 1) throw new Error("Due has already been settled");
-    }
-    const payment = await tx.payment.update({
-      where: { id: paymentId },
-      data: { status: "SUCCEEDED", providerReference },
-    });
-    if (existing.due && appliedToDue) {
-      if (existing.due.purpose === "PLAN_REGISTRATION" && existing.due.planId)
-        await advancePlanAfterRegistrationPayment(tx, existing.due.planId);
-      if (existing.due.purpose === "MEMBERSHIP" && existing.memberId)
-        await refreshMembershipFinancialStatus(tx, existing.memberId);
-    }
-    const receipt = await tx.receipt.create({
-      data: {
-        paymentId,
-        receiptNumber: officialReceiptNumber(payment.externalId),
-      },
-    });
-    await tx.foundationLedger.create({
-      data: {
-        direction: "CREDIT",
-        amountPaise: payment.amountPaise,
-        purpose: appliedToDue ? (existing.due?.purpose ?? "PAYMENT") : "UNAPPLIED_PAYMENT",
-        relatedExternalId: payment.externalId,
-        reference: providerReference,
-        authorizedActorId: actorId,
-        status: "SUCCEEDED",
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        actorId,
-        actorRole: actorId ? undefined : "SYSTEM",
-        action: "PAYMENT_SETTLED",
-        entityType: "Payment",
-        entityId: payment.id,
-      },
-    });
-    if (!appliedToDue && existing.due) await flagUnappliedFunds(tx, payment, existing.due, actorId);
-    if (existing.member) {
-      await createInAppNotificationInTransaction(tx, {
-        userId: existing.member.userId,
-        type: "PAYMENT_SUCCEEDED",
-        title: "Payment received",
-        body: appliedToDue
-          ? `Your Foundation payment has been received successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`
-          : `Your online payment was received, but could not be applied to the obligation. Admin has been notified for refund review. Receipt ${receipt.receiptNumber} records the funds received; no membership or plan was activated.`,
-        template: "PAYMENT_SETTLED",
-        relatedExternalId: payment.externalId,
-        payload: {
-          receiptNumber: receipt.receiptNumber,
-          duePurpose: existing.due?.purpose ?? "PAYMENT",
-        },
-        idempotencyKey: `payment:${payment.id}:succeeded`,
-      });
-      await createInAppNotificationInTransaction(tx, {
-        userId: existing.member.userId,
-        type: "RECEIPT_GENERATED",
-        title: "Official receipt generated",
-        body: `Official receipt ${receipt.receiptNumber} is ready for your Foundation payment.`,
-        template: "RECEIPT_GENERATED",
-        relatedExternalId: payment.externalId,
-        payload: { receiptNumber: receipt.receiptNumber },
-        idempotencyKey: `receipt:${receipt.id}:generated`,
-      });
-    }
-    return { payment, receipt, alreadySettled: false };
+export async function settlePaymentInTransaction(
+  tx: Prisma.TransactionClient,
+  paymentId: string,
+  actorId: string | undefined,
+  providerReference: string,
+  settledAt = new Date(),
+) {
+  const existing = await tx.payment.findUnique({
+    where: { id: paymentId },
+    include: { receipt: true, due: true, member: { select: { userId: true } } },
   });
+  if (!existing) throw new Error("Payment not found");
+  if (existing.status === "SUCCEEDED") {
+    if (existing.providerReference !== providerReference)
+      throw new Error("Payment capture reference does not match the settled payment");
+    return { payment: existing, receipt: existing.receipt, alreadySettled: true };
+  }
+  // Older failed webhooks closed the whole order and could compensate a split wallet debit.
+  // A later verified capture on such an order must be recorded for refund review.
+  const previouslyFailedOrder =
+    existing.status === "FAILED" &&
+    existing.method === "ONLINE" &&
+    Boolean(existing.providerOrderId) &&
+    Boolean(existing.due);
+  if (existing.status !== "PENDING" && !previouslyFailedOrder)
+    throw new Error("Payment is not pending");
+
+  let appliedToDue = !previouslyFailedOrder;
+  if (existing.due && appliedToDue) {
+    try {
+      assertDueSettlementAllowed(existing.due, settledAt);
+    } catch (error) {
+      if (existing.method !== "ONLINE") throw error;
+      // A signed capture is real money even after waiver, death, closure or
+      // expiry. Record it, but never resurrect the obligation or entitlement.
+      appliedToDue = false;
+    }
+  }
+  if (existing.due && appliedToDue) {
+    const claimed = await tx.due.updateMany({
+      where: {
+        id: existing.due.id,
+        status: { in: ["PENDING", "OVERDUE", "EXPIRED"] },
+      },
+      data: { status: "PAID", paidAt: settledAt },
+    });
+    if (claimed.count !== 1) throw new Error("Due has already been settled");
+  }
+  const payment = await tx.payment.update({
+    where: { id: paymentId },
+    data: { status: "SUCCEEDED", providerReference },
+  });
+  if (existing.due && appliedToDue) {
+    if (existing.due.purpose === "PLAN_REGISTRATION" && existing.due.planId)
+      await advancePlanAfterRegistrationPayment(tx, existing.due.planId);
+    if (existing.due.purpose === "MEMBERSHIP" && existing.memberId)
+      await refreshMembershipFinancialStatus(tx, existing.memberId);
+  }
+  const receipt = await tx.receipt.create({
+    data: {
+      paymentId,
+      receiptNumber: officialReceiptNumber(payment.externalId),
+    },
+  });
+  if (appliedToDue && existing.due?.purpose === "MEMBERSHIP")
+    await issueMembershipPackInTransaction(tx, payment.id);
+  await tx.foundationLedger.create({
+    data: {
+      direction: "CREDIT",
+      amountPaise: payment.amountPaise,
+      purpose: appliedToDue ? (existing.due?.purpose ?? "PAYMENT") : "UNAPPLIED_PAYMENT",
+      relatedExternalId: payment.externalId,
+      reference: providerReference,
+      authorizedActorId: actorId,
+      status: "SUCCEEDED",
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      actorId,
+      actorRole: actorId ? undefined : "SYSTEM",
+      action: "PAYMENT_SETTLED",
+      entityType: "Payment",
+      entityId: payment.id,
+    },
+  });
+  if (!appliedToDue && existing.due) await flagUnappliedFunds(tx, payment, existing.due, actorId);
+  if (existing.member) {
+    await createInAppNotificationInTransaction(tx, {
+      userId: existing.member.userId,
+      type: "PAYMENT_SUCCEEDED",
+      title: "Payment received",
+      body: appliedToDue
+        ? `Your Foundation payment has been received successfully. Receipt ${receipt.receiptNumber} is available in your member portal.`
+        : `Your online payment was received, but could not be applied to the obligation. Admin has been notified for refund review. Receipt ${receipt.receiptNumber} records the funds received; no membership or plan was activated.`,
+      template: "PAYMENT_SETTLED",
+      relatedExternalId: payment.externalId,
+      payload: {
+        receiptNumber: receipt.receiptNumber,
+        duePurpose: existing.due?.purpose ?? "PAYMENT",
+      },
+      idempotencyKey: `payment:${payment.id}:succeeded`,
+    });
+    await createInAppNotificationInTransaction(tx, {
+      userId: existing.member.userId,
+      type: "RECEIPT_GENERATED",
+      title: "Official receipt generated",
+      body: `Official receipt ${receipt.receiptNumber} is ready for your Foundation payment.`,
+      template: "RECEIPT_GENERATED",
+      relatedExternalId: payment.externalId,
+      payload: { receiptNumber: receipt.receiptNumber },
+      idempotencyKey: `receipt:${receipt.id}:generated`,
+    });
+  }
+  return { payment, receipt, alreadySettled: false };
 }
 
 export async function failPayment(paymentId: string, actorId?: string) {

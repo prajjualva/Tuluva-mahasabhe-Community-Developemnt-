@@ -1,5 +1,6 @@
 import { assertPositiveMoney } from "../../domain/money";
 import { z } from "zod";
+import { issueMembershipPackInTransaction } from "../members/membership-pack-service";
 import { refreshMembershipFinancialStatus } from "../membership/membership-lifecycle-service";
 import { advancePlanAfterRegistrationPayment } from "../plans/plan-service";
 import { notifyMemberByMemberIdInTransaction } from "../notifications/notification-service";
@@ -157,6 +158,7 @@ export async function payDueFromWallet(
         receiptNumber: officialReceiptNumber(payment.externalId),
       },
     });
+    if (due.purpose === "MEMBERSHIP") await issueMembershipPackInTransaction(tx, payment.id);
     await tx.auditLog.create({
       data: {
         actorId,

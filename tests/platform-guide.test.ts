@@ -62,6 +62,7 @@ describe("platform guide", () => {
       permissions: new Set(["member:profile:read"]),
       coordinatorActive: false,
       memberUnavailable: false,
+      onboardingPaymentRequired: false,
     });
     const html = renderToStaticMarkup(await GuidePage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain("Member guide");

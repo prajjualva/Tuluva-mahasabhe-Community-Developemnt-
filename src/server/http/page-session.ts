@@ -14,12 +14,20 @@ export const readPageSession = cache(async () => {
         ? "/payment-review"
         : memberUnavailable
           ? "/account-unavailable"
-          : coordinatorActive && permissions.has("coordinator:members:manage")
-            ? "/coordinator"
-            : permissions.has("member:profile:read")
-              ? "/member"
-              : "/access-denied";
-    return { dashboard, permissions, coordinatorActive, memberUnavailable };
+          : principal.onboardingPaymentRequired
+            ? "/membership-payment"
+            : coordinatorActive && permissions.has("coordinator:members:manage")
+              ? "/coordinator"
+              : permissions.has("member:profile:read")
+                ? "/member"
+                : "/access-denied";
+    return {
+      dashboard,
+      permissions,
+      coordinatorActive,
+      memberUnavailable,
+      onboardingPaymentRequired: principal.onboardingPaymentRequired,
+    };
   } catch {
     return null;
   }

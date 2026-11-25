@@ -9,6 +9,8 @@ import { prisma } from "../database/prisma";
  */
 export const NOTIFICATION_TYPES = [
   "REGISTRATION",
+  "MEMBERSHIP_ACTIVATED",
+  "MEMBERSHIP_GRANTED",
   "EMAIL_VERIFICATION",
   "MOBILE_VERIFICATION",
   "COORDINATOR_ASSIGNED",

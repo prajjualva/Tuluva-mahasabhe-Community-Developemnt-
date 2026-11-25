@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { prisma } from "../database/prisma";
+import { readOwnMembershipPack } from "../members/membership-pack-service";
 import {
   notificationTransport,
   type ExternalNotificationChannel,
@@ -63,8 +64,10 @@ export async function deliverQueuedNotifications(options: DeliveryScope = {}) {
         notification: {
           select: {
             type: true,
+            userId: true,
             template: true,
             createdAt: true,
+            relatedExternalId: true,
             user: {
               select: {
                 status: true,
@@ -142,12 +145,37 @@ export async function deliverQueuedNotifications(options: DeliveryScope = {}) {
         },
       });
       if (claimed.count !== 1) continue;
-      const result = await transport({
-        destination,
-        type,
-        template,
-        idempotencyKey: `tuluworld-notification/${delivery.id}`,
-      });
+      let result: "ACCEPTED" | "RETRY" | "FAILED" = "RETRY";
+      try {
+        let attachments;
+        if (channel === "EMAIL" && ["MEMBERSHIP_ACTIVATED", "MEMBERSHIP_GRANTED"].includes(type)) {
+          if (!delivery.notification.relatedExternalId)
+            throw new Error("Membership pack unavailable");
+          const pack = await readOwnMembershipPack(
+            delivery.notification.userId,
+            delivery.notification.relatedExternalId,
+          );
+          if (!pack) {
+            result = "FAILED";
+          } else {
+            const { membershipPackAttachments } =
+              await import("../members/membership-pack-documents");
+            attachments = await membershipPackAttachments(pack);
+          }
+        }
+        result =
+          result === "FAILED"
+            ? "FAILED"
+            : await transport({
+                destination,
+                type,
+                template,
+                idempotencyKey: `tuluworld-notification/${delivery.id}`,
+                attachments,
+              });
+      } catch {
+        result = "RETRY";
+      }
       const completed = await prisma.notificationDelivery.updateMany({
         where: { id: delivery.id, state: "SENDING", claimToken },
         data: {

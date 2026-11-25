@@ -35,10 +35,13 @@ export const platformGuide: GuideEntry[] = [
     audience: "Member",
     topic: "Start here",
     title: "Create an account and sign in",
-    summary: "Your account gives you access to your own member records.",
+    summary:
+      "Add your photo, complete your initial membership payment and open your member workspace.",
     steps: [
-      "Open registration and enter the requested identity, contact and membership details.",
-      "Use a Coordinator referral code if you have one; the Foundation manages assignments.",
+      "Open registration and enter your details, including a clear profile photo for your ID card.",
+      "Enter an active Coordinator referral code. Ask your Coordinator for help if you do not have one.",
+      "Complete the initial membership payment on the next screen. New accounts open the member workspace only after payment is verified; a pending cash collection is not a completed payment.",
+      "Verify your email to receive your welcome message, membership ID card, membership certificate and payment receipt. You can also download the PDFs from Membership documents.",
       "Sign in with your registered email and password. Member, Coordinator and Admin accounts share the same secure sign-in page.",
       "If you cannot sign in, expand the verification-code or password-reset section on the sign-in page.",
     ],

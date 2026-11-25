@@ -17,11 +17,20 @@ import { PaymentProviderRequestError } from "../../../../server/payments/payment
 import { prisma } from "../../../../server/database/prisma";
 import { memberPaymentRequestSchema } from "../../../../server/payments/member-payment-request";
 import { walletSettlementDto } from "../../../../server/payments/payment-dto";
+import { scheduleNotificationDelivery } from "../../../../server/notifications/notification-delivery-service";
 export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
     const body = memberPaymentRequestSchema.parse(await request.json());
+    if (
+      principal.onboardingPaymentRequired &&
+      !principal.permissions.has("admin:*") &&
+      body.dueId !== principal.registrationDueExternalId
+    )
+      return NextResponse.json({ error: "Pay your initial membership due first" }, { status: 403 });
     const memberId = await memberIdForUser(principal.userId);
+    // after() runs only after the command commits and the response is sent.
+    scheduleNotificationDelivery({ userId: principal.userId, limit: 10 });
     const dueId = await dueIdForMemberExternal(memberId, body.dueId);
     if (body.method === "WALLET")
       return NextResponse.json(

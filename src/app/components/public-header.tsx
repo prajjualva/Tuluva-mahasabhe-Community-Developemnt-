@@ -14,11 +14,11 @@ export async function PublicHeader() {
         <Link href="/death-support-events">Support events</Link>
         {session ? (
           <>
-            {session.permissions.has("member:profile:read") && !session.memberUnavailable && (
-              <Link href="/member/profile">My profile</Link>
-            )}
+            {session.permissions.has("member:profile:read") &&
+              !session.memberUnavailable &&
+              !session.onboardingPaymentRequired && <Link href="/member/profile">My profile</Link>}
             <Link className="public-dashboard-link" href={session.dashboard}>
-              My dashboard
+              {session.onboardingPaymentRequired ? "Complete membership" : "My dashboard"}
             </Link>
           </>
         ) : (

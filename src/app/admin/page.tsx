@@ -10,6 +10,7 @@ import { AdminCoordinatorManagement } from "./coordinator-management";
 import { AdminFoundationLedger } from "./foundation-ledger";
 import { AdminOverview } from "./overview";
 import { AdminMemberManagement } from "./member-management";
+import { AdminMembershipAccess } from "./membership-access";
 import { NomineeVerificationQueue } from "../components/nominee-verification";
 import { requirePagePermission } from "../../server/http/page-authorize";
 import { DueWaivers } from "../components/due-waivers";
@@ -35,7 +36,12 @@ export default async function AdminDashboard() {
           label: "Members",
           description:
             "Find a member, review their history, manage assignments and reopen eligible closed accounts.",
-          content: <AdminMemberManagement />,
+          content: (
+            <>
+              <AdminMembershipAccess />
+              <AdminMemberManagement />
+            </>
+          ),
         },
         {
           id: "coordinators",

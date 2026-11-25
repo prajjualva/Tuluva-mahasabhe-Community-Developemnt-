@@ -18,6 +18,12 @@ const welcome = {
 };
 
 describe("transactional notification transports", () => {
+  it("will not send the activated welcome without all membership attachments", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ id: "mail-id" }));
+    const send = notificationTransport("EMAIL", configuration, request);
+    expect(await send?.({ ...welcome, type: "MEMBERSHIP_ACTIVATED" })).toBe("FAILED");
+    expect(request).not.toHaveBeenCalled();
+  });
   it("sends controlled registration copy and a stable idempotency key to Resend", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ id: "mail-id" }));
     const send = notificationTransport("EMAIL", configuration, request);
@@ -28,7 +34,7 @@ describe("transactional notification transports", () => {
     const body = JSON.parse(String(options?.body));
     expect(body).toMatchObject({
       to: [welcome.destination],
-      subject: "Welcome to Tuluva Mahasabhe",
+      subject: "Tuluva Mahasabhe account created",
     });
     expect(body.text).toContain("https://foundation.example/login");
     expect(body.text).not.toContain("MEMBER_REGISTERED");

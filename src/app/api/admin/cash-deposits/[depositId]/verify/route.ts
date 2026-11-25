@@ -4,6 +4,8 @@ import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { verifyCashDeposit } from "../../../../../../server/coordinators/cash-reconciliation-service";
 import { parseRupeesToPaise } from "../../../../../../domain/cash-reconciliation";
 import { cashRouteError } from "../../../../cash-route-response";
+import { prisma } from "../../../../../../server/database/prisma";
+import { scheduleNotificationDelivery } from "../../../../../../server/notifications/notification-delivery-service";
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ depositId: string }> },
@@ -25,15 +27,21 @@ export async function POST(
       })
       .strict()
       .parse(await request.json());
-    return NextResponse.json(
-      await verifyCashDeposit(principal.userId, depositId, {
-        ...command,
-        allocations: command.allocations.map(({ receivedRupees, ...item }) => ({
-          ...item,
-          receivedAmountPaise: parseRupeesToPaise(receivedRupees),
-        })),
-      }),
-    );
+    const result = await verifyCashDeposit(principal.userId, depositId, {
+      ...command,
+      allocations: command.allocations.map(({ receivedRupees, ...item }) => ({
+        ...item,
+        receivedAmountPaise: parseRupeesToPaise(receivedRupees),
+      })),
+    });
+    const recipients = await prisma.cashDepositAllocation.findMany({
+      where: { deposit: { externalId: depositId } },
+      select: { collection: { select: { member: { select: { userId: true } } } } },
+      take: 50,
+    });
+    for (const userId of new Set(recipients.map((item) => item.collection.member.userId)))
+      scheduleNotificationDelivery({ userId, limit: 10 });
+    return NextResponse.json(result);
   } catch (error) {
     return cashRouteError(error);
   }

@@ -9,6 +9,7 @@ import {
 import { createInAppNotificationInTransaction } from "../notifications/notification-service";
 import { cashReceiptNumber } from "./cash-service";
 import { refreshMembershipFinancialStatus } from "../membership/membership-lifecycle-service";
+import { issueMembershipPackInTransaction } from "../members/membership-pack-service";
 import {
   capturedFundsCanSettleDue,
   flagUnappliedFunds,
@@ -248,6 +249,8 @@ export async function verifyCashCollectionInTransaction(
       update: {},
       create: { paymentId: payment.id, receiptNumber: officialReceiptNumber(payment.externalId) },
     });
+    if (appliedToDue && due.purpose === "MEMBERSHIP")
+      await issueMembershipPackInTransaction(tx, payment.id);
     await createInAppNotificationInTransaction(tx, {
       userId: collection.member.userId,
       type: "CASH_COLLECTION",

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { verifyCashCollection } from "../../../../../../server/coordinators/cash-payment-service";
 import { cashRouteError } from "../../../../cash-route-response";
+import { scheduleNotificationDelivery } from "../../../../../../server/notifications/notification-delivery-service";
+import { prisma } from "../../../../../../server/database/prisma";
 
 const bodySchema = z.object({
   approved: z.boolean(),
@@ -17,9 +19,18 @@ export async function POST(
     const { collectionId } = await params;
     z.string().uuid().parse(collectionId);
     const body = bodySchema.parse(await request.json());
-    return NextResponse.json(
-      await verifyCashCollection(collectionId, principal.userId, body.approved, body.reason),
+    const result = await verifyCashCollection(
+      collectionId,
+      principal.userId,
+      body.approved,
+      body.reason,
     );
+    const collection = await prisma.cashCollection.findUnique({
+      where: { externalId: collectionId },
+      select: { member: { select: { userId: true } } },
+    });
+    if (collection) scheduleNotificationDelivery({ userId: collection.member.userId, limit: 10 });
+    return NextResponse.json(result);
   } catch (error) {
     return cashRouteError(error);
   }

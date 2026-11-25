@@ -10,6 +10,7 @@ import {
   settlePaymentRefund,
 } from "../../../../../server/payments/payment-refund-service";
 import { prisma } from "../../../../../server/database/prisma";
+import { scheduleNotificationDelivery } from "../../../../../server/notifications/notification-delivery-service";
 import {
   getPaymentProvider,
   PaymentProviderSignatureError,
@@ -45,7 +46,7 @@ export async function POST(
     if (webhook.kind === "PAYMENT") {
       const payment = await prisma.payment.findUnique({
         where: { providerOrderId: webhook.providerOrderId },
-        select: { id: true, method: true, amountPaise: true },
+        select: { id: true, method: true, amountPaise: true, member: { select: { userId: true } } },
       });
       // Razorpay may send empty payment notes. Match the unique order previously stored
       // by the server and verify the amount before applying any financial changes.
@@ -59,8 +60,11 @@ export async function POST(
 
       // A failed Razorpay payment attempt can be retried against the same order.
       // Keep the order payable and retain the attempt in the webhook log.
-      if (webhook.type === "PAYMENT_SUCCEEDED")
+      if (webhook.type === "PAYMENT_SUCCEEDED") {
         await settlePayment(payment.id, undefined, webhook.providerReference, webhook.occurredAt);
+        if (payment.member)
+          scheduleNotificationDelivery({ userId: payment.member.userId, limit: 10 });
+      }
     } else {
       const refund = await prisma.paymentRefund.findUnique({
         where: webhook.refundExternalId

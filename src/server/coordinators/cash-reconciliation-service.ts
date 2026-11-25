@@ -257,104 +257,112 @@ export async function verifyCashDeposit(adminUserId: string, externalId: string,
     a.collectionExternalId.localeCompare(b.collectionExternalId),
   );
   const decisionHash = hash({ ...command, allocations: decisions });
-  return runSerializablePaymentTransaction(async (tx) => {
-    const deposit = await tx.cashDeposit.findUnique({
-      where: { externalId },
-      include: {
-        allocations: { include: { collection: true } },
-      },
-    });
-    if (!deposit || !deposit.evidenceBytes) throw new Error("Deposit evidence not found");
-    if (deposit.status !== "PENDING") {
-      if (deposit.decisionHash !== decisionHash)
-        throw new Error("Deposit has already been reviewed");
-      return tx.cashDeposit.findUniqueOrThrow({ where: { id: deposit.id }, select: depositSelect });
-    }
-    const map = new Map(
-      decisions.map((item) => [item.collectionExternalId, item.receivedAmountPaise]),
-    );
-    if (
-      map.size !== decisions.length ||
-      map.size !== deposit.allocations.length ||
-      deposit.allocations.some((item) => !map.has(item.collection.externalId))
-    )
-      throw new Error("Every deposit collection needs one allocation");
-    const received = validateRemittanceAllocations(
-      deposit.amountPaise,
-      deposit.allocations.map((item) => ({
-        expectedAmountPaise: item.expectedAmountPaise,
-        receivedAmountPaise: map.get(item.collection.externalId)!,
-      })),
-    );
-    if ((!command.approved && received !== 0) || (command.approved && received === 0))
-      throw new Error(
-        "Rejected deposits must allocate zero; verified deposits must allocate received money",
-      );
-    await tx.cashDeposit.update({
-      where: { id: deposit.id },
-      data: {
-        status: command.approved ? "VERIFIED" : "REJECTED",
-        verifiedBy: adminUserId,
-        verifiedAt: new Date(),
-        reason: command.reason,
-        decisionHash,
-      },
-    });
-    for (const item of deposit.allocations) {
-      const amount = map.get(item.collection.externalId)!;
-      await tx.cashDepositAllocation.update({
-        where: { id: item.id },
-        data: { receivedAmountPaise: amount },
+  return runSerializablePaymentTransaction(
+    async (tx) => {
+      const deposit = await tx.cashDeposit.findUnique({
+        where: { externalId },
+        include: {
+          allocations: { include: { collection: true } },
+        },
       });
-      if (amount > 0) {
-        const payment = await tx.payment.findUniqueOrThrow({
-          where: { id: item.collection.paymentId },
-          include: { due: true },
-        });
-        await tx.foundationLedger.create({
-          data: {
-            direction: "CREDIT",
-            amountPaise: amount,
-            purpose: capturedFundsCanSettleDue(payment.due!, item.collection.createdAt)
-              ? payment.due!.purpose
-              : "UNAPPLIED_PAYMENT",
-            relatedExternalId: payment.externalId,
-            authorizedActorId: adminUserId,
-            reference: deposit.externalId,
-            supportingDepositId: deposit.id,
-            status: "SUCCEEDED",
-          },
+      if (!deposit || !deposit.evidenceBytes) throw new Error("Deposit evidence not found");
+      if (deposit.status !== "PENDING") {
+        if (deposit.decisionHash !== decisionHash)
+          throw new Error("Deposit has already been reviewed");
+        return tx.cashDeposit.findUniqueOrThrow({
+          where: { id: deposit.id },
+          select: depositSelect,
         });
       }
-      const remaining = item.expectedAmountPaise - amount;
-      if (remaining === 0) {
-        await verifyCashCollectionInTransaction(
-          tx,
-          item.collection.externalId,
-          adminUserId,
-          true,
-          command.reason,
+      const map = new Map(
+        decisions.map((item) => [item.collectionExternalId, item.receivedAmountPaise]),
+      );
+      if (
+        map.size !== decisions.length ||
+        map.size !== deposit.allocations.length ||
+        deposit.allocations.some((item) => !map.has(item.collection.externalId))
+      )
+        throw new Error("Every deposit collection needs one allocation");
+      const received = validateRemittanceAllocations(
+        deposit.amountPaise,
+        deposit.allocations.map((item) => ({
+          expectedAmountPaise: item.expectedAmountPaise,
+          receivedAmountPaise: map.get(item.collection.externalId)!,
+        })),
+      );
+      if ((!command.approved && received !== 0) || (command.approved && received === 0))
+        throw new Error(
+          "Rejected deposits must allocate zero; verified deposits must allocate received money",
         );
-        await tx.cashDiscrepancy.updateMany({
-          where: { cashCollectionId: item.collection.id, status: "UNRESOLVED" },
-          data: { status: "PAID", resolvedAt: new Date(), amountPaise: 0 },
+      await tx.cashDeposit.update({
+        where: { id: deposit.id },
+        data: {
+          status: command.approved ? "VERIFIED" : "REJECTED",
+          verifiedBy: adminUserId,
+          verifiedAt: new Date(),
+          reason: command.reason,
+          decisionHash,
+        },
+      });
+      for (const item of deposit.allocations) {
+        const amount = map.get(item.collection.externalId)!;
+        await tx.cashDepositAllocation.update({
+          where: { id: item.id },
+          data: { receivedAmountPaise: amount },
         });
-      } else {
-        await openCashDiscrepancy(tx, item.collection.id, remaining, command.reason, adminUserId);
+        if (amount > 0) {
+          const payment = await tx.payment.findUniqueOrThrow({
+            where: { id: item.collection.paymentId },
+            include: { due: true },
+          });
+          await tx.foundationLedger.create({
+            data: {
+              direction: "CREDIT",
+              amountPaise: amount,
+              purpose: capturedFundsCanSettleDue(payment.due!, item.collection.createdAt)
+                ? payment.due!.purpose
+                : "UNAPPLIED_PAYMENT",
+              relatedExternalId: payment.externalId,
+              authorizedActorId: adminUserId,
+              reference: deposit.externalId,
+              supportingDepositId: deposit.id,
+              status: "SUCCEEDED",
+            },
+          });
+        }
+        const remaining = item.expectedAmountPaise - amount;
+        if (remaining === 0) {
+          await verifyCashCollectionInTransaction(
+            tx,
+            item.collection.externalId,
+            adminUserId,
+            true,
+            command.reason,
+          );
+          await tx.cashDiscrepancy.updateMany({
+            where: { cashCollectionId: item.collection.id, status: "UNRESOLVED" },
+            data: { status: "PAID", resolvedAt: new Date(), amountPaise: 0 },
+          });
+        } else {
+          await openCashDiscrepancy(tx, item.collection.id, remaining, command.reason, adminUserId);
+        }
       }
-    }
-    await tx.auditLog.create({
-      data: {
-        actorId: adminUserId,
-        action: command.approved ? "CASH_DEPOSIT_VERIFIED" : "CASH_DEPOSIT_REJECTED",
-        entityType: "CashDeposit",
-        entityId: deposit.id,
-        reason: command.reason,
-        afterState: { receivedAmountPaise: received, allocations: decisions },
-      },
-    });
-    return tx.cashDeposit.findUniqueOrThrow({ where: { id: deposit.id }, select: depositSelect });
-  });
+      await tx.auditLog.create({
+        data: {
+          actorId: adminUserId,
+          action: command.approved ? "CASH_DEPOSIT_VERIFIED" : "CASH_DEPOSIT_REJECTED",
+          entityType: "CashDeposit",
+          entityId: deposit.id,
+          reason: command.reason,
+          afterState: { receivedAmountPaise: received, allocations: decisions },
+        },
+      });
+      return tx.cashDeposit.findUniqueOrThrow({ where: { id: deposit.id }, select: depositSelect });
+      // A bounded deposit may reconcile multiple collections and their enrollment
+      // packets atomically. No provider requests or PDF rendering occur in this transaction.
+    },
+    { timeoutMs: 60_000 },
+  );
 }
 
 export async function readCashDepositEvidence(userId: string, externalId: string, admin: boolean) {

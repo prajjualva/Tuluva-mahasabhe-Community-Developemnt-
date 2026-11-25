@@ -2,8 +2,10 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { AuthShell } from "../components/auth-shell";
+import { useRouter } from "next/navigation";
 
 export default function RegisterForm() {
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -15,10 +17,14 @@ export default function RegisterForm() {
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(Object.fromEntries(form)),
+        body: form,
       });
       const data = await response.json();
+      if (response.ok) {
+        router.push("/membership-payment");
+        router.refresh();
+        return;
+      }
       setMessage(
         response.ok
           ? "Registration created. Sign in to pay your first membership due."
@@ -37,9 +43,22 @@ export default function RegisterForm() {
       <p className="eyebrow">MEMBER REGISTRATION</p>
       <h1>Become a member</h1>
       <p className="page-description">
-        Join through your Coordinator and manage your community membership online.
+        Create your account, then complete your membership payment to open your member workspace.
       </p>
       <form className="auth-form" onSubmit={submit}>
+        <label>
+          Profile photo
+          <input
+            name="photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            required
+            aria-describedby="registration-photo-help"
+          />
+          <small id="registration-photo-help">
+            Choose a clear photo for your membership ID card. JPEG, PNG or WebP, up to 3 MB.
+          </small>
+        </label>
         <label>
           Full name
           <input name="fullName" required minLength={2} />
@@ -71,8 +90,9 @@ export default function RegisterForm() {
           />
         </label>
         <small>
-          Use at least 12 characters for your password. Registration creates your first ₹369
-          membership due; it does not collect a payment automatically.
+          Use at least 12 characters for your password. Next, pay your initial membership fee. Your
+          ID card, membership certificate and payment receipt will be sent to your verified email
+          after payment is confirmed.
         </small>
         <button type="submit" disabled={busy}>
           {busy ? "Creating your account…" : "Create member account"}

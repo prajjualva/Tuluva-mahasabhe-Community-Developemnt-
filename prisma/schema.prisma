@@ -176,33 +176,34 @@ enum NewsStatus {
 }
 
 model User {
-  id               String                  @id @default(uuid()) @db.Uuid
-  externalId       String                  @unique @default(uuid()) @db.Uuid
-  email            String?                 @unique
-  mobile           String?                 @unique
-  passwordHash     String?
-  emailVerifiedAt  DateTime?
-  mobileVerifiedAt DateTime?
-  pendingEmail     String?                 @unique
-  pendingMobile    String?                 @unique
-  status           UserStatus              @default(ACTIVE)
-  createdAt        DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
-  member           Member?
-  roles            UserRole[]
-  auditLogs        AuditLog[]              @relation("AuditActor")
-  verifiedNominees NomineeVerification[]   @relation("NomineeVerifier")
-  sessions         AuthSession[]
-  otpChallenges    OtpChallenge[]
-  passwordResets   PasswordReset[]
-  comments         Comment[]
-  newsComments     NewsComment[]
-  notifications    Notification[]
-  deletionRequest  AccountDeletionRequest?
-  contentReports   ContentReport[]         @relation("ContentReporter")
-  reviewedReports  ContentReport[]         @relation("ContentReviewer")
-  blockedUsers     UserBlock[]             @relation("BlockOwner")
-  blockedBy        UserBlock[]             @relation("BlockedUser")
+  id                       String                  @id @default(uuid()) @db.Uuid
+  externalId               String                  @unique @default(uuid()) @db.Uuid
+  email                    String?                 @unique
+  mobile                   String?                 @unique
+  passwordHash             String?
+  emailVerifiedAt          DateTime?
+  mobileVerifiedAt         DateTime?
+  pendingEmail             String?                 @unique
+  pendingMobile            String?                 @unique
+  status                   UserStatus              @default(ACTIVE)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  member                   Member?
+  roles                    UserRole[]
+  auditLogs                AuditLog[]              @relation("AuditActor")
+  verifiedNominees         NomineeVerification[]   @relation("NomineeVerifier")
+  sessions                 AuthSession[]
+  otpChallenges            OtpChallenge[]
+  passwordResets           PasswordReset[]
+  comments                 Comment[]
+  newsComments             NewsComment[]
+  notifications            Notification[]
+  deletionRequest          AccountDeletionRequest?
+  contentReports           ContentReport[]         @relation("ContentReporter")
+  reviewedReports          ContentReport[]         @relation("ContentReviewer")
+  blockedUsers             UserBlock[]             @relation("BlockOwner")
+  blockedBy                UserBlock[]             @relation("BlockedUser")
+  approvedMembershipGrants MembershipGrant[]       @relation("MembershipGrantApprover")
 
   @@map("users")
 }
@@ -349,6 +350,11 @@ model Member {
   deathCases              DeathCase[]            @relation("SubjectMember")
   referral                Referral?
   profilePhoto            MemberProfilePhoto?
+  // Null preserves access for members registered before paid onboarding v1.
+  registrationDueId       String?                @unique @db.Uuid
+  registrationDue         Due?                   @relation("RegistrationDue", fields: [registrationDueId], references: [id], onDelete: Restrict)
+  membershipPacks         MembershipPack[]
+  membershipGrants        MembershipGrant[]
 
   @@index([status])
   @@index([coordinatorId])
@@ -362,6 +368,43 @@ model MemberProfilePhoto {
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@map("member_profile_photos")
+}
+
+model MembershipPack {
+  id                String           @id @default(uuid()) @db.Uuid
+  externalId        String           @unique @default(uuid()) @db.Uuid
+  memberId          String           @db.Uuid
+  paymentId         String?          @unique @db.Uuid
+  grantId           String?          @unique @db.Uuid
+  certificateNumber String           @unique
+  fullName          String
+  address           String
+  mobile            String?
+  photoBytes        Bytes?
+  issuedAt          DateTime         @default(now())
+  validUntil        DateTime
+  testOnly          Boolean          @default(false)
+  member            Member           @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  payment           Payment?         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  grant             MembershipGrant? @relation(fields: [grantId], references: [id], onDelete: Restrict)
+
+  @@index([memberId, issuedAt])
+  @@map("membership_packs")
+}
+
+model MembershipGrant {
+  id             String          @id @default(uuid()) @db.Uuid
+  externalId     String          @unique @default(uuid()) @db.Uuid
+  memberId       String          @unique @db.Uuid
+  approvedById   String          @db.Uuid
+  reason         String
+  idempotencyKey String          @unique
+  approvedAt     DateTime        @default(now())
+  member         Member          @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  approvedBy     User            @relation("MembershipGrantApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  pack           MembershipPack?
+
+  @@map("membership_grants")
 }
 
 model Coordinator {
@@ -603,22 +646,23 @@ model Contribution {
 }
 
 model Due {
-  id              String                @id @default(uuid()) @db.Uuid
-  externalId      String                @unique @default(uuid()) @db.Uuid
-  memberId        String                @db.Uuid
-  planId          String?               @db.Uuid
-  purpose         String
-  billingCycleKey String?               @unique
-  amountPaise     Int
-  status          DueStatus             @default(PENDING)
-  dueAt           DateTime
-  paidAt          DateTime?
-  lastReminderAt  DateTime?
-  createdAt       DateTime              @default(now())
-  member          Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  plan            CommunitySupportPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
-  payments        Payment[]
-  waiverRequests  DueWaiverRequest[]
+  id                 String                @id @default(uuid()) @db.Uuid
+  externalId         String                @unique @default(uuid()) @db.Uuid
+  memberId           String                @db.Uuid
+  planId             String?               @db.Uuid
+  purpose            String
+  billingCycleKey    String?               @unique
+  amountPaise        Int
+  status             DueStatus             @default(PENDING)
+  dueAt              DateTime
+  paidAt             DateTime?
+  lastReminderAt     DateTime?
+  createdAt          DateTime              @default(now())
+  member             Member                @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  registrationMember Member?               @relation("RegistrationDue")
+  plan               CommunitySupportPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments           Payment[]
+  waiverRequests     DueWaiverRequest[]
 
   @@index([memberId, status, dueAt])
   @@index([planId, status])
@@ -656,6 +700,7 @@ model Payment {
   providerReference String?                    @unique
   idempotencyKey    String                     @unique
   receipt           Receipt?
+  membershipPack    MembershipPack?
   refund            PaymentRefund?
   eventReversal     ContributionEventReversal?
   member            Member?                    @relation(fields: [memberId], references: [id], onDelete: Restrict)

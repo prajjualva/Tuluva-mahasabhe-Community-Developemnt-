@@ -33,6 +33,13 @@ export default function PrivacyPage() {
         </p>
         <h2>Payments and account activity</h2>
         <p>
+          Your registration photo is used for your membership ID card. After your initial membership
+          payment is verified, we issue an ID card, membership certificate and receipt. These
+          documents contain your membership details and are sent as attachments only to your
+          verified email through our email provider. You can also download them privately from your
+          member workspace.
+        </p>
+        <p>
           We record dues, membership and plan payments, contribution obligations, receipts,
           Foundation Wallet movements, cash collection evidence, refunds and support payments.
           Online checkout is provided by Razorpay. Payment credentials entered into Razorpay

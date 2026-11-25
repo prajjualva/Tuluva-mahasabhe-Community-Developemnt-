@@ -23,6 +23,7 @@ it("provides an in-app request flow and explicitly describes review", async () =
     permissions: new Set(["member:profile:read"]),
     coordinatorActive: false,
     memberUnavailable: false,
+    onboardingPaymentRequired: false,
   });
   const html = renderToStaticMarkup(await DeleteAccountPage());
   expect(html).toContain("Account deletion request");

@@ -67,6 +67,7 @@ export async function assertNoPendingPaymentForDue(
  */
 export async function runSerializablePaymentTransaction<T>(
   operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  options: { timeoutMs?: number } = {},
 ) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -76,7 +77,7 @@ export async function runSerializablePaymentTransaction<T>(
         // A pooled production database can take longer than Prisma's default
         // five seconds even though the transaction is healthy.
         maxWait: 10_000,
-        timeout: 20_000,
+        timeout: Math.min(60_000, Math.max(20_000, options.timeoutMs ?? 20_000)),
       });
     } catch (error) {
       const retryable =

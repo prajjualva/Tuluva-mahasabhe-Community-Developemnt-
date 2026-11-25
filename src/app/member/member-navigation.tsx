@@ -9,6 +9,7 @@ const groups = [
       ["Dashboard", "/member"],
       ["Profile", "/member/profile"],
       ["Member ID card", "/member/id-card"],
+      ["Membership documents", "/member/membership-documents"],
       ["Membership", "/member/membership"],
       ["Community Support Plan", "/member/community-support-plan"],
       ["Nominee", "/member/nominee"],

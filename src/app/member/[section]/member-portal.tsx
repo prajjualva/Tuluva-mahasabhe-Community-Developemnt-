@@ -5,6 +5,7 @@ import { MemberCommunications } from "../member-communications";
 import { MemberProfile } from "../member-profile";
 import { readMemberRecord } from "../member-record-loader";
 import { paymentStartFeedback, paymentPurposeLabel } from "../payment-feedback";
+import { openGatewayCheckout, type Checkout } from "../../components/gateway-checkout";
 
 function readVisibleRecord<T>(visible: boolean, path: string) {
   return visible ? readMemberRecord<T>(path) : Promise.resolve(null);
@@ -26,21 +27,6 @@ type Plan = {
   feeExempt?: boolean;
 };
 type Membership = { status: string; joinedAt: string };
-type Checkout = {
-  provider: "razorpay";
-  paymentExternalId: string;
-  orderId: string;
-  keyId: string;
-  amountPaise: number;
-  currency: "INR";
-};
-type RazorpayConstructor = new (options: Record<string, unknown>) => { open(): void };
-
-declare global {
-  interface Window {
-    Razorpay?: RazorpayConstructor;
-  }
-}
 type WalletActivity = {
   direction: "CREDIT" | "DEBIT";
   amountPaise: number;
@@ -65,30 +51,6 @@ type ReceiptDetail = {
 const money = (paise: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(paise / 100);
 const key = () => crypto.randomUUID();
-
-async function openGatewayCheckout(checkout: Checkout) {
-  if (!window.Razorpay) {
-    await new Promise<void>((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Could not load the payment checkout"));
-      document.head.appendChild(script);
-    });
-  }
-  if (!window.Razorpay) throw new Error("Payment checkout is unavailable");
-  new window.Razorpay({
-    key: checkout.keyId,
-    amount: checkout.amountPaise,
-    currency: checkout.currency,
-    order_id: checkout.orderId,
-    name: "Tuluva Mahasabhe",
-    description: "Foundation contribution or membership payment",
-    notes: { foundation_payment_external_id: checkout.paymentExternalId },
-    handler: () => undefined,
-  }).open();
-}
 
 export function MemberPortal({ section }: { section: string }) {
   const pageCopy: Record<string, [string, string]> = {

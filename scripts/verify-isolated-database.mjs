@@ -244,6 +244,8 @@ try {
       ? error.message
       : "Isolated database verification could not complete.",
   );
+  if (typeof error?.code === "string" && /^[A-Z0-9]{5,20}$/.test(error.code))
+    console.error(`Isolated verification error code: ${error.code}`);
   process.exitCode = 1;
 } finally {
   if (created) {

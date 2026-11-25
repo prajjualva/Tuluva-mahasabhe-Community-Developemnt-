@@ -6,7 +6,14 @@ vi.mock("../src/server/http/authorize", () => ({
   requirePermissionForAccessToken: mocks.authorize,
 }));
 import { requirePagePermission } from "../src/server/http/page-authorize";
+import { MembershipPaymentRequiredError } from "../src/server/members/paid-onboarding";
 describe("role-aware protected page redirects", () => {
+  it("redirects a new unpaid account to membership payment rather than login", async () => {
+    mocks.authorize.mockRejectedValue(new MembershipPaymentRequiredError());
+    await expect(requirePagePermission("member:profile:read", "/member")).rejects.toThrow(
+      "redirect:/membership-payment",
+    );
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.token.mockReturnValue({ value: "session" });

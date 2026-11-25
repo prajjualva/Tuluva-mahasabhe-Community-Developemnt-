@@ -15,4 +15,6 @@ coverage/
 *.tsbuildinfo
 uploads/
 uploads-ci/
+tmp/
+output/pdf/
 prisma/*.db

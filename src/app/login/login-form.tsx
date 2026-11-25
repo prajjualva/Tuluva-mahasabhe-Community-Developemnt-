@@ -35,7 +35,9 @@ export default function LoginForm({
       const data = await result.json();
       const next = new URLSearchParams(window.location.search).get("next");
       router.push(
-        data.redirectTo === "/account-unavailable" || data.redirectTo === "/payment-review"
+        data.redirectTo === "/account-unavailable" ||
+          data.redirectTo === "/payment-review" ||
+          data.redirectTo === "/membership-payment"
           ? data.redirectTo
           : safeInternalRedirect(next, data.redirectTo ?? "/member"),
       );
