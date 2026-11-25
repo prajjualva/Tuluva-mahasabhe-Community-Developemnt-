@@ -19,11 +19,15 @@ The reviewer deployment uses the same application routes, Prisma services, autho
 
 ### Provisioned resources
 
+Checked again on 25 November 2026: the AWS console redirects to sign-in. The dedicated reviewer bucket/workload role and hosted acceptance remain blocked on account authentication. The main application continues using its existing production storage; this reviewer setup is separate.
+
 - The separate Vercel project `tuluva-mahasabhe-review` (`prj_RYTQ4fdr0FTUEBYTd8xYdFACG5uD`) exists on the inspected Hobby team, with Node 24 and team-issued OIDC enabled. It has not been deployed or promoted yet.
 - Persistent database `csf_review_test_1c1782d4cccf42c8b7486ab9d4bd8d05` was created on the existing inspected Neon Free-plan compute, migrated and initialized. Runtime role `tuluva_review_1c1782d4cccf42c8` has no administrative/schema-creation privileges and cannot connect to `tuluva_production`. No production records were copied.
 - Seventeen encrypted Production variables were installed in this review project, including distinct application secrets and Razorpay **Test Mode** credentials. Migration-owner access, fixture passwords and email/SMS delivery credentials are excluded from runtime configuration.
 - [Review trust policy](aws-review-trust.json) and [review storage policy](aws-review-storage-policy.json) are prepared for role `tuluva-review-documents` and bucket `tuluva-review-documents-20261124-f8b2c4`. Neither AWS resource has been created: the AWS session is signed out. Their configured names are references, not evidence that storage works. Verify the account, project OIDC values and exact access before applying these policies.
 - A new Test Mode webhook, storage verification, hosted acceptance and reviewer-origin Android acceptance remain pending. Preserve the existing live webhook and storage role.
+
+The 25 November paid-onboarding release is migrated in this database. Separate fictional onboarding accounts exercised the initial wallet payment and the Admin fee-exemption grant, with the resulting ID card, certificate and receipt/exemption records. These append-only review records are retained. All 353 tests passed in CI run [45573362621](https://github.com/prajjualva/Tuluva-mahasabhe-Community-Developemnt-/actions/runs/45573362621), including the isolated database cases. The new local phone acceptance does not replace the hosted webhook, real inbox or Android-device checks below.
 
 ## Initialize sample records once
 

@@ -135,7 +135,7 @@ The developer must review these declarations against the current providers and d
 
 - Account data includes name, email, phone, address, membership and Coordinator relationships.
 - Financial data includes dues, payment references/history, wallet activity, receipts and support-case bank data.
-- Optional photos are used for profiles and downloaded membership ID cards.
+- A profile photo is required for new registrations and is used for the profile and membership ID card. Existing members can update their photo. After initial membership activation, private ID-card/certificate/receipt or exemption PDFs can be emailed to the member's verified address; reflect these attachments in the per-type handling and provider review.
 - Nominee and support workflows may process identity/support documents and incident data.
 - User-generated content includes condolences and community news comments.
 - Authentication, abuse prevention and audit records support account security and service operations.
