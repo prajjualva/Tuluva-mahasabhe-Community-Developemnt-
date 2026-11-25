@@ -1,5 +1,11 @@
 # Tuluva Mahasabhe Android release
 
+## Website onboarding release - 25 November 2026
+
+The live website now requires a photo for new registrations and routes them directly to their initial membership payment. Protected Member features open after verified settlement or an explicitly audited Admin membership grant. Admin → Members provides offline-payment confirmation and a separately labelled fee-exemption grant. Welcome packs include the ID card, certificate and receipt/exemption record, with private downloads and verified-email delivery. See [implementation and validated release evidence](PAID_MEMBER_ONBOARDING.md#validated-website-release---25-november-2026).
+
+Source `b9c604b` passed [CI 45573362621](https://github.com/prajjualva/Tuluva-mahasabhe-Community-Developemnt-/actions/runs/45573362621), all 353 tests and production checks, and was promoted as `dpl_FLa39SneHKiwPBeVJSJJCkc2iaBC`. The new schema was migrated over direct connections before promotion. Existing Member access was preserved; no production test payments or grants were inserted. Required registration photos and private document email attachments are reflected in the updated privacy notice and must be represented accurately in the unfinished Play Data safety declaration. This website release does not complete public Google Play approval.
+
 ## Support response and reviewer isolation — 24 November 2026
 
 - Source `a81bdab` passed CI run [45334808541](https://github.com/prajjualva/Tuluva-mahasabhe-Community-Developemnt-/actions/runs/45334808541): **336 tests, all 84 test files, zero skips**, including isolated PostgreSQL tests; Prisma generation/validation/migrations/seed, type checking, ESLint, Prettier, dependency audit and production build also passed.
