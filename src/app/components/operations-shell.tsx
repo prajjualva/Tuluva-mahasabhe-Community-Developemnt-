@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { SignOutButton } from "../member/sign-out-button";
 import { OrganizationBrand } from "./organization-brand";
 import { PrivacyLinks } from "./privacy-links";
+import { PendingDuesReminder } from "./pending-dues-reminder";
 type Panel = { id: string; label: string; description: string; content: ReactNode };
 export function OperationsShell({
   role,
@@ -36,6 +37,7 @@ export function OperationsShell({
   const selected = panels.find((panel) => panel.id === active) ?? panels[0];
   return (
     <div className="shell operations-shell">
+      <PendingDuesReminder />
       <aside className="portal-sidebar">
         <OrganizationBrand href={role === "Admin" ? "/admin" : "/coordinator"} />
         <p className="portal-role">{role} workspace</p>

@@ -425,7 +425,7 @@ export function MemberPortal({ section }: { section: string }) {
           <MemberCommunications section={section} />
         )}
         {(duesPage || planPage) && (
-          <article>
+          <article id="payable-dues">
             <h2>{planPage ? "Registration payment" : "Payable dues"}</h2>
             {displayDues.some((due) => due.purpose === "CONTRIBUTION") && (
               <section className="due-entry" aria-label="Contribution payment options">

@@ -1988,6 +1988,104 @@ button:disabled {
 .onboarding-content article > button {
   margin: 6px 10px 10px 0;
 }
+.dues-reminder {
+  box-sizing: border-box;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: clamp(20px, 5vw, 30px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fafbf9;
+  color: #24342d;
+  box-shadow: 0 24px 80px #142d282e;
+}
+.dues-reminder::backdrop {
+  background: #102c246b;
+}
+.dues-reminder-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dues-reminder-heading .eyebrow {
+  margin: 0;
+}
+.dues-reminder .dues-reminder-close {
+  flex: 0 0 44px;
+  min-height: 44px;
+  margin: -8px -8px -8px 0;
+  padding: 0;
+  background: transparent;
+  color: var(--forest);
+  font-size: 1.7rem;
+}
+.dues-reminder h2 {
+  margin: 18px 0 10px;
+  font-size: 1.6rem;
+  line-height: 1.2;
+}
+.dues-reminder > p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.dues-reminder-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+}
+.dues-reminder-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  line-height: 1.4;
+}
+.dues-reminder-list li > div {
+  min-width: 0;
+}
+.dues-reminder-list li strong {
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.dues-reminder-list li span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.dues-reminder-amount {
+  flex-shrink: 0;
+}
+.dues-reminder-actions {
+  display: grid;
+  gap: 10px;
+}
+.dues-reminder-actions a,
+.dues-reminder-actions button {
+  min-height: 46px;
+  margin: 0;
+  text-align: center;
+}
+.dues-reminder-actions a {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.dues-reminder-actions .dues-reminder-later {
+  color: var(--forest);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+#payable-dues {
+  scroll-margin-top: 24px;
+}
 @media (max-width: 480px) {
   .onboarding-shell > header {
     align-items: flex-start;

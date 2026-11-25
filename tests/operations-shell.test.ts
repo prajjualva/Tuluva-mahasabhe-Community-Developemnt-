@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { OperationsShell } from "../src/app/components/operations-shell";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/admin",
+}));
 
 describe("operations navigation accessibility", () => {
   it("provides a named main landmark and a programmatically focusable section heading", () => {

@@ -15,6 +15,12 @@ Admin → Members → Activate a registered membership exposes:
 
 Both actions refuse closed/deceased accounts and unresolved pending checkouts/collections. They cover initial membership only. Normal renewals, reactivation, contribution obligations and support-plan approvals retain their separate rules.
 
+## Pending-dues reminder
+
+The Member, Coordinator and Admin workspaces check only the signed-in user's payable dues through the existing authorized API. A native modal presents individual server amounts and a Continue payment link to the dues screen, where existing online-checkout recovery and wallet controls remain authoritative. Staff without their own Member dues see no reminder. Failed/denied reads and empty results do not produce a payment demand.
+
+The reminder appears on a workspace visit/reload while dues remain. Later/Escape/Close dismisses the same obligations for that mounted workspace, avoiding repetition on every menu click; new or changed obligations can appear after a fresh check. Visible workspaces refresh on return and once per minute. Payment/plan/wallet/remittance screens are excluded to avoid interrupting a payment. No reminder action initiates a charge or changes financial records.
+
 ## Membership documents and email
 
 Verified initial settlement creates one immutable issue snapshot per payment; an approved fee exemption creates one issue snapshot per grant. The snapshot contains the Member's name, address, mobile, photo and original-cycle validity, with a unique certificate number. It does not include passwords, bank data or staff reasons. Document generation happens outside financial transactions.
