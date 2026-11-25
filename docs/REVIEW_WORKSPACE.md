@@ -8,6 +8,7 @@ The reviewer deployment uses the same application routes, Prisma services, autho
 
 - `APP_REVIEW_MODE=1` belongs only in a separate `tuluva-mahasabhe-review` project. Its TLS-protected database must be named `csf_review_test_` followed by 32 lowercase hex characters. The application refuses a normal live database in this mode. The owner/migration connection stays outside runtime; the runtime database role must have no superuser, role-creation or database-creation permissions.
 - Generate distinct authentication, encryption and job secrets. Jobs reject all requests in review mode; omit the cron definitions from the review project's deployment configuration too.
+- Deploy the review project with the checked-in `vercel.review.json` configuration (copy it to the isolated staging archive's `vercel.json`). It keeps the same production build and readiness gates while defining no cron schedules. Preserve the main project's `vercel.json`.
 - Configure Razorpay Test Mode credentials and a distinct webhook secret. Live keys are refused. Create a **Test Mode** webhook at the review origin's `/api/payments/webhooks/razorpay` for `payment.captured`, `payment.failed`, `refund.processed` and `refund.failed`. Preserve the live webhook.
 - Use `UPLOAD_STORAGE=s3`, `AWS_REGION=ap-south-2`, a separate `tuluva-review-*` private bucket and a dedicated workload role. Require all four Block Public Access controls, encryption, versioning and bucket-owner-enforced ownership. The live bucket is refused in review mode.
 - The workload role must trust only the verified Vercel issuer/audience and exact subject `owner:tuluworld:project:tuluva-mahasabhe-review:environment:production`. Verify the actual project's Security values before saving. Restrict object access to the new bucket's `death-evidence/*`, with security-read permissions on that bucket only. Do not expand the live role or create long-lived AWS keys.
@@ -16,7 +17,17 @@ The reviewer deployment uses the same application routes, Prisma services, autho
 
 `npm run deploy:check` still requires complete test gateway configuration, initialized fixture evidence, least-privilege database access and private storage controls. Do not bypass this gate to obtain a hosted link.
 
+### Provisioned resources
+
+- The separate Vercel project `tuluva-mahasabhe-review` (`prj_RYTQ4fdr0FTUEBYTd8xYdFACG5uD`) exists on the inspected Hobby team, with Node 24 and team-issued OIDC enabled. It has not been deployed or promoted yet.
+- Persistent database `csf_review_test_1c1782d4cccf42c8b7486ab9d4bd8d05` was created on the existing inspected Neon Free-plan compute, migrated and initialized. Runtime role `tuluva_review_1c1782d4cccf42c8` has no administrative/schema-creation privileges and cannot connect to `tuluva_production`. No production records were copied.
+- Seventeen encrypted Production variables were installed in this review project, including distinct application secrets and Razorpay **Test Mode** credentials. Migration-owner access, fixture passwords and email/SMS delivery credentials are excluded from runtime configuration.
+- [Review trust policy](aws-review-trust.json) and [review storage policy](aws-review-storage-policy.json) are prepared for role `tuluva-review-documents` and bucket `tuluva-review-documents-20261124-f8b2c4`. Neither AWS resource has been created: the AWS session is signed out. Their configured names are references, not evidence that storage works. Verify the account, project OIDC values and exact access before applying these policies.
+- A new Test Mode webhook, storage verification, hosted acceptance and reviewer-origin Android acceptance remain pending. Preserve the existing live webhook and storage role.
+
 ## Initialize sample records once
+
+The initial persistent setup can be provisioned with `node --env-file=.env scripts/provision-review-database.mjs --verified-existing-free-plan` after inspecting the existing Neon plan and usage. This creates a randomly named database and a separate restricted login on the existing compute, applies migrations and initializes the sample records. It refuses to overwrite `.env.review-operator`, secures that file before writing credentials, denies the runtime connection to the live database and verifies that no payments/receipts were seeded. Interrupted provisioning retains its exact private handoff for inspection; do not rerun blindly or delete application records.
 
 Create an empty dedicated database and apply all checked-in migrations over its direct connection. In a private operator env file, set review mode, the review owner database URL and distinct new passwords:
 
@@ -57,6 +68,10 @@ node scripts/verify-review-workspace.mjs
 
 Automated assertions do not replace hosted Razorpay webhook or Android-device acceptance.
 
+An additional local browser check against the persistent isolated review database verified an actual wallet debit, receipt preview and HTML download, geometric profile-avatar upload and front/back ID-card PNG download. The receipt and ID-card downloads visibly identify themselves as test documents without real monetary value or membership entitlement. The primary sample wallet now holds ₹1,900 after its ₹100 contribution; retain that isolated test history. The temporary local screen server was stopped. It was not a hosted reviewer deployment.
+
+Evidence is saved under the private local handoff folder `C:/Users/Admin/Downloads/Tuluva-Mahasabhe-Play-Store/`: `reviewer-receipt-validated.jpg`, `reviewer-test-receipt.html`, `reviewer-id-card-validated.jpg` and `reviewer-test-id-card.png`. These artifacts contain fictional reviewer data only. The complete source validation passed 336 tests across 84 files, without skips, in [CI run 45334808541](https://github.com/prajjualva/Tuluva-mahasabhe-Community-Developemnt-/actions/runs/45334808541).
+
 For a temporary loopback-only screen check, finish `npm run build:verify` first and append `--screen` to the helper command. It serves that build using a distinct localhost hostname, writes a private temporary sign-in handoff and waits for `stop` on stdin. Do not rebuild `.next-validation` while this screen is running. Stopping the runner removes its disposable database and private files; verify cleanup after an interrupted session.
 
 ## Connect the installed app
@@ -65,7 +80,7 @@ After hosted acceptance, set live `PLAY_REVIEW_URL=https://tuluva-mahasabhe-revi
 
 Supply both Member credentials and these instructions in Play Console's private App access form. Accurately identify sample records, test payments and restricted staff tools. Verify the transition in the Play-installed Android app. A second origin can show a browser toolbar unless included in a later build's verified origins; do not claim device acceptance without testing.
 
-AWS sign-in and approval of the exact new workload access, review project configuration, Test Mode webhook configuration and hosted/device acceptance remain external steps. Source implementation alone does not make the workspace public.
+AWS sign-in and approval of the exact new workload access, Test Mode webhook configuration and hosted/device acceptance remain external steps. Source implementation alone does not make the workspace public. The connected Prajwal mailbox search found no new D-U-N-S reply; the Foundation mailbox could not be checked because its Google session had expired. Do not interpret this as confirmation that every mailbox has no reply.
 
 Google's reply also says financial-service apps require a verified Organization developer account. Complete D-U-N-S and conversion, then wait at least 72 hours after conversion before submitting, as support instructed. Personal-account closed testing is not a substitute.
 

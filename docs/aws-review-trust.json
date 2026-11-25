@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::360908957233:oidc-provider/oidc.vercel.com/tuluworld"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.vercel.com/tuluworld:aud": "https://vercel.com/tuluworld",
+          "oidc.vercel.com/tuluworld:sub": "owner:tuluworld:project:tuluva-mahasabhe-review:environment:production"
+        }
+      }
+    }
+  ]
+}

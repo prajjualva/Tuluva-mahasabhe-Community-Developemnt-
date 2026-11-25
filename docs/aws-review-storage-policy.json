@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReviewDocumentsOnly",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::tuluva-review-documents-20261124-f8b2c4/death-evidence/*",
+      "Condition": { "Bool": { "aws:SecureTransport": "true" } }
+    },
+    {
+      "Sid": "ReviewBucketSecurityRead",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": "arn:aws:s3:::tuluva-review-documents-20261124-f8b2c4",
+      "Condition": { "Bool": { "aws:SecureTransport": "true" } }
+    }
+  ]
+}
