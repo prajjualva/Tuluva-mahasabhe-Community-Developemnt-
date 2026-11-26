@@ -2,7 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { readOwnOnboarding } from "../../server/members/onboarding-service";
-import { openGatewayCheckout, type Checkout } from "../components/gateway-checkout";
+import {
+  openGatewayCheckout,
+  verifyGatewayPayment,
+  type Checkout,
+} from "../components/gateway-checkout";
 import { OtpWorkflow } from "../components/otp-workflow";
 
 type State = Awaited<ReturnType<typeof readOwnOnboarding>>;
@@ -57,9 +61,11 @@ export function MembershipPayment({ initial, emailOnly }: { initial: State; emai
           result.error ?? "Payment could not be started. Check its status before trying again.",
         );
       if (result.checkout) {
-        await openGatewayCheckout(result.checkout);
+        const outcome = await openGatewayCheckout(result.checkout);
         setMessage(
-          "Complete the checkout. Access opens only after the Foundation receives verified payment confirmation.",
+          outcome.status === "SUCCEEDED"
+            ? "Membership payment received successfully. Your documents are ready."
+            : "Payment is awaiting confirmation. Do not pay again if your bank was debited; check payment status below.",
         );
       }
       await refresh();
@@ -94,15 +100,28 @@ export function MembershipPayment({ initial, emailOnly }: { initial: State; emai
       <p className="eyebrow">YOUR MEMBERSHIP</p>
       <h1>
         {state.paymentRequired
-          ? "One step to join your community."
+          ? !state.emailVerified
+            ? "Verify your email to continue."
+            : "One step to join your community."
           : "Welcome to Tuluva Mahasabhe."}
       </h1>
       <ol className="onboarding-steps" aria-label="Registration steps">
         <li>Account & photo</li>
-        <li aria-current={state.paymentRequired ? "step" : undefined}>Membership payment</li>
+        <li aria-current={!state.emailVerified ? "step" : undefined}>Verify email</li>
+        <li aria-current={state.paymentRequired && state.emailVerified ? "step" : undefined}>
+          Membership payment
+        </li>
         <li aria-current={!state.paymentRequired ? "step" : undefined}>Your membership pack</li>
       </ol>
-      {state.paymentRequired ? (
+      {state.paymentRequired && !state.emailVerified ? (
+        <article>
+          <h2>Confirm your email address</h2>
+          <p>
+            We need to verify {state.email} before you pay. Request a code below and enter it here.
+            Your ID card, certificate and receipt will be sent to this verified email after payment.
+          </p>
+        </article>
+      ) : state.paymentRequired ? (
         <article>
           <p>
             Hi {state.fullName}, your account is ready. Complete your initial annual membership
@@ -148,6 +167,31 @@ export function MembershipPayment({ initial, emailOnly }: { initial: State; emai
                   Cancel unstarted payment
                 </button>
               )}
+              {state.pendingPayment?.method === "ONLINE" && (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    void verifyGatewayPayment(state.pendingPayment!.externalId)
+                      .then((result) => {
+                        setMessage(
+                          result.status === "SUCCEEDED"
+                            ? "Payment received successfully. Your membership documents are ready."
+                            : "Payment is not yet confirmed. Do not pay again if your bank was debited.",
+                        );
+                        return refresh();
+                      })
+                      .catch(() =>
+                        setMessage(
+                          "Payment confirmation is unavailable. Please do not pay again if your bank was debited.",
+                        ),
+                      )
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  Check payment status
+                </button>
+              )}
             </>
           ) : (
             <p>
@@ -185,7 +229,7 @@ export function MembershipPayment({ initial, emailOnly }: { initial: State; emai
       <p role="status" aria-live="polite">
         {message}
       </p>
-      {!state.emailVerified && <OtpWorkflow member emailOnly={emailOnly} />}
+      {!state.emailVerified && <OtpWorkflow member emailOnly={emailOnly} registration />}
       <p>
         <Link href="/login?next=%2Fmembership-payment">Sign in again</Link> ·{" "}
         <Link href="/delete-account">Account deletion</Link>

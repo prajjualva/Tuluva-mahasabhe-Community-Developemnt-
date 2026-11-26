@@ -67,7 +67,19 @@ export interface PaymentProvider {
   checkoutOrderFromExisting(intent: PaymentIntent, orderId: string): CheckoutOrder;
   refundCapturedPayment(intent: PaymentRefundIntent): Promise<ProviderRefund>;
   verifyWebhook(rawBody: string, signature: string | null): VerifiedPaymentWebhook;
+  findCapturedOrderPayment(
+    orderId: string,
+    amountPaise: number,
+  ): Promise<VerifiedOrderCapture | null>;
 }
+
+export type VerifiedOrderCapture = {
+  providerOrderId: string;
+  providerReference: string;
+  amountPaise: number;
+  currency: "INR";
+  verifiedAt: Date;
+};
 
 export type PaymentProviderAvailability =
   | { available: true; provider: PaymentProvider }
@@ -143,7 +155,8 @@ function equalDigest(expected: string, supplied: string) {
 
 /**
  * A real Razorpay Orders API adapter. It never represents an online payment as
- * successful: settlement is driven solely by a verified provider webhook.
+ * successful merely from browser callbacks. Settlement requires a verified
+ * webhook or a matching captured payment fetched from the authenticated API.
  */
 export class RazorpayPaymentProvider implements PaymentProvider {
   readonly provider = "razorpay" as const;
@@ -152,6 +165,76 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     private readonly config: RazorpayConfig,
     private readonly fetchImplementation: FetchLike = fetch,
   ) {}
+
+  async findCapturedOrderPayment(
+    orderId: string,
+    amountPaise: number,
+  ): Promise<VerifiedOrderCapture | null> {
+    if (
+      !/^order_[A-Za-z0-9]+$/.test(orderId) ||
+      !Number.isSafeInteger(amountPaise) ||
+      amountPaise <= 0
+    )
+      throw new PaymentProviderRequestError("Invalid provider reconciliation request");
+    const read = async (path: string) => {
+      try {
+        const response = await this.fetchImplementation(`https://api.razorpay.com/v1/${path}`, {
+          headers: {
+            authorization: `Basic ${Buffer.from(`${this.config.keyId}:${this.config.keySecret}`).toString("base64")}`,
+          },
+          redirect: "error",
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok) throw new Error();
+        return await response.json();
+      } catch {
+        throw new PaymentProviderRequestError("Payment confirmation is temporarily unavailable");
+      }
+    };
+    const order = z
+      .object({
+        id: z.literal(orderId),
+        amount: z.literal(amountPaise),
+        currency: z.literal("INR"),
+        status: z.enum(["created", "attempted", "paid"]),
+        amount_paid: z.number().int().nonnegative(),
+        amount_due: z.number().int().nonnegative(),
+      })
+      .parse(await read(`orders/${encodeURIComponent(orderId)}`));
+    if (order.status !== "paid") return null;
+    if (order.amount_paid !== amountPaise || order.amount_due !== 0)
+      throw new PaymentProviderRequestError("Provider order amount does not match");
+    const collection = z
+      .object({
+        items: z.array(
+          z.object({
+            id: z.string().regex(/^pay_[A-Za-z0-9]+$/),
+            order_id: z.literal(orderId),
+            amount: z.number().int().positive(),
+            currency: z.literal("INR"),
+            status: z.string(),
+            captured: z.boolean(),
+            amount_refunded: z.number().int().nonnegative(),
+          }),
+        ),
+      })
+      .parse(await read(`orders/${encodeURIComponent(orderId)}/payments`));
+    const captures = collection.items.filter(
+      (payment) => payment.status === "captured" && payment.captured,
+    );
+    if (!captures.length) return null;
+    if (captures.length !== 1 || captures[0].amount !== amountPaise)
+      throw new PaymentProviderRequestError("Provider capture does not match");
+    const capture = captures[0];
+    if (capture.amount_refunded !== 0) return null;
+    return {
+      providerOrderId: orderId,
+      providerReference: capture.id,
+      amountPaise,
+      currency: "INR",
+      verifiedAt: new Date(),
+    };
+  }
 
   checkoutOrderFromExisting(intent: PaymentIntent, orderId: string): CheckoutOrder {
     return {

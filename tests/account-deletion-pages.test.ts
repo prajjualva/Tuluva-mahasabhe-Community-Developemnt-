@@ -19,6 +19,7 @@ it("lets a visitor request account deletion without installing or signing in to 
 
 it("provides an in-app request flow and explicitly describes review", async () => {
   vi.mocked(readPageSession).mockResolvedValue({
+    userId: "member-test-user",
     dashboard: "/member",
     permissions: new Set(["member:profile:read"]),
     coordinatorActive: false,

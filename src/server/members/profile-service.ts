@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../database/prisma";
 import { runSerializablePaymentTransaction } from "../payments/payment-integrity";
 import { changeMemberCoordinator } from "../coordinators/coordinator-management-service";
+import { canReadMemberIdCard } from "./member-card-access";
 
 const profileSelect = {
   externalId: true,
@@ -41,7 +42,7 @@ function profileResponse({
 export async function readOwnProfile(userId: string) {
   const profile = await prisma.member.findUnique({ where: { userId }, select: profileSelect });
   if (!profile) throw new Error("Member not found");
-  return profileResponse(profile);
+  return { ...profileResponse(profile), canViewIdCard: await canReadMemberIdCard(userId) };
 }
 export async function updateOwnProfile(userId: string, input: unknown) {
   const command = z

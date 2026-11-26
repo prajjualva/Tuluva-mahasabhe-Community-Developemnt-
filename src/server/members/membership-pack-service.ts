@@ -79,10 +79,14 @@ export async function issueMembershipPackInTransaction(
       f.bytes AS "photoBytes", m."joinedAt", m."membershipBillingAnchor",
       r."issuedAt" AS "issuedAt", p."externalId" AS reference
     FROM payments p JOIN members m ON m.id=p."memberId"
-    JOIN dues d ON d.id=p."dueId" AND d.id=m."registrationDueId" AND d."memberId"=m.id
+    JOIN dues d ON d.id=p."dueId" AND d."memberId"=m.id
     JOIN receipts r ON r."paymentId"=p.id JOIN users u ON u.id=m."userId"
     LEFT JOIN member_profile_photos f ON f."memberId"=m.id
     WHERE p.id=${paymentId}::uuid AND p.status='SUCCEEDED' AND d.status='PAID' AND d.purpose='MEMBERSHIP'
+      AND (d.id=m."registrationDueId" OR (m."registrationDueId" IS NULL AND d.id=(
+        SELECT initial.id FROM dues initial WHERE initial."memberId"=m.id AND initial.purpose='MEMBERSHIP'
+        ORDER BY initial."createdAt" ASC, initial.id ASC LIMIT 1
+      )))
       AND m.status NOT IN ('CLOSED','DECEASED')
       AND NOT EXISTS(SELECT 1 FROM payment_refunds rf WHERE rf."paymentId"=p.id AND rf.status='SUCCEEDED')`;
   return source ? issuePack(tx, source, paymentId, null) : null;

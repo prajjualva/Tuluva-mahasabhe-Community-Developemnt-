@@ -5,10 +5,12 @@ import { OtpWorkflow } from "../../components/otp-workflow";
 import { prisma } from "../../../server/database/prisma";
 import { isEmailOnlyPilot } from "../../../server/auth/otp-delivery";
 import { scheduleNotificationDelivery } from "../../../server/notifications/notification-delivery-service";
+import { canReadMemberIdCard } from "../../../server/members/member-card-access";
 
 export default async function MembershipDocuments() {
   const actor = await requirePagePermission("member:profile:read", "/member/membership-documents");
   const pack = await readOwnMembershipPack(actor.userId);
+  const canViewIdCard = !!pack || (await canReadMemberIdCard(actor.userId));
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: actor.userId },
     select: { emailVerifiedAt: true },
@@ -58,10 +60,13 @@ export default async function MembershipDocuments() {
       ) : (
         <article>
           <p>
-            No initial membership pack has been issued for this account. Your current ID card and
-            payment receipts are available from their screens.
+            {canViewIdCard
+              ? "No initial membership pack has been issued for this account. Your current ID card and payment receipts are available from their screens."
+              : "Your ID card and membership certificate become available after verified membership payment or an approved Foundation fee exemption."}
           </p>
-          <Link href="/member/id-card">View current ID card</Link>
+          <Link href={canViewIdCard ? "/member/id-card" : "/member/dues"}>
+            {canViewIdCard ? "View current ID card" : "View membership payment"}
+          </Link>
         </article>
       )}
       {!user.emailVerifiedAt && <OtpWorkflow member emailOnly={isEmailOnlyPilot()} />}

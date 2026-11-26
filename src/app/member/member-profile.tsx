@@ -8,6 +8,7 @@ type Profile = {
   address: string;
   status: string;
   photoUpdatedAt: string | null;
+  canViewIdCard: boolean;
   user: {
     email: string;
     mobile: string;
@@ -94,8 +95,20 @@ export function MemberProfile({
           )}
           {summary ? (
             <>
-              <Link href={profile.photoUpdatedAt ? "/member/id-card" : "/member/profile"}>
-                {profile.photoUpdatedAt ? "View member ID card →" : "Add a profile photo →"}
+              <Link
+                href={
+                  !profile.canViewIdCard
+                    ? "/member/dues"
+                    : profile.photoUpdatedAt
+                      ? "/member/id-card"
+                      : "/member/profile"
+                }
+              >
+                {!profile.canViewIdCard
+                  ? "Complete membership payment →"
+                  : profile.photoUpdatedAt
+                    ? "View member ID card →"
+                    : "Add a profile photo →"}
               </Link>
             </>
           ) : coordinatorOnly ? (
@@ -122,6 +135,7 @@ export function MemberProfile({
               <ProfilePhoto
                 fullName={profile.fullName}
                 photoUpdatedAt={profile.photoUpdatedAt}
+                canViewIdCard={profile.canViewIdCard}
                 onPhotoChanged={(photoUpdatedAt) =>
                   setProfile((current) => current && { ...current, photoUpdatedAt })
                 }

@@ -36,7 +36,7 @@ const groups = [
     ],
   ],
 ] as const;
-export function MemberNavigation() {
+export function MemberNavigation({ canViewIdCard = false }: { canViewIdCard?: boolean }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   return (
@@ -54,16 +54,18 @@ export function MemberNavigation() {
         {groups.map(([group, links]) => (
           <div className="member-nav-group" role="group" aria-label={group} key={group}>
             <p>{group}</p>
-            {links.map(([label, href]) => (
-              <Link
-                key={href}
-                href={href}
-                aria-current={path === href ? "page" : undefined}
-                onClick={() => setOpen(false)}
-              >
-                {label}
-              </Link>
-            ))}
+            {links
+              .filter(([, href]) => canViewIdCard || href !== "/member/id-card")
+              .map(([label, href]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={path === href ? "page" : undefined}
+                  onClick={() => setOpen(false)}
+                >
+                  {label}
+                </Link>
+              ))}
           </div>
         ))}
       </nav>

@@ -4,12 +4,17 @@ import { requireApiPermission } from "../../../../../../server/http/authorize";
 import { prisma } from "../../../../../../server/database/prisma";
 import { createOnlineCheckout } from "../../../../../../server/payments/online-payment-service";
 import { assertDuePayable } from "../../../../../../server/payments/payment-integrity";
+import {
+  assertRegistrationEmailVerified,
+  RegistrationEmailVerificationRequiredError,
+} from "../../../../../../server/members/registration-verification";
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ paymentId: string }> },
 ) {
   try {
     const actor = await requireApiPermission(request, "member:profile:write");
+    if (actor.onboardingPaymentRequired) await assertRegistrationEmailVerified(actor.userId);
     const externalId = z
       .string()
       .uuid()
@@ -36,7 +41,12 @@ export async function POST(
       status: "PENDING",
       checkout: result.checkout,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RegistrationEmailVerificationRequiredError)
+      return NextResponse.json(
+        { error: error.message, code: "EMAIL_VERIFICATION_REQUIRED" },
+        { status: 403 },
+      );
     return NextResponse.json(
       {
         error:

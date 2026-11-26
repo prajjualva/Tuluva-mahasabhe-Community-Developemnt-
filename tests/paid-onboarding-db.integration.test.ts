@@ -34,6 +34,10 @@ import { POST as initiatePayment } from "../src/app/api/member/payments/route";
 import { POST as registerRoute } from "../src/app/api/auth/register/route";
 import { administerInitialMembership } from "../src/server/admin/admin-membership-access-service";
 import { GET as downloadDocument } from "../src/app/api/member/membership-documents/[packId]/[kind]/route";
+import { RazorpayPaymentProvider } from "../src/server/payments/payment-provider";
+import { reconcileOwnedOnlinePayment } from "../src/server/payments/payment-reconciliation-service";
+import { canReadMemberIdCard } from "../src/server/members/member-card-access";
+import { assertRegistrationEmailVerified } from "../src/server/members/registration-verification";
 
 const databaseDescribe = process.env.RUN_DB_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 async function fixture() {
@@ -82,6 +86,95 @@ const requestFor = (token: string, path: string, method = "GET", body?: unknown)
   });
 
 databaseDescribe("paid registration and persistent membership welcome pack", () => {
+  it("requires email verification before initial checkout without blocking recorded funds or inventing verification", async () => {
+    const { member, token, registered } = await fixture();
+    const due = await prisma.due.findUniqueOrThrow({ where: { id: member.registrationDueId! } });
+    const response = await initiatePayment(
+      requestFor(token, "/api/member/payments", "POST", {
+        dueId: due.externalId,
+        method: "ONLINE",
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()).code).toBe("EMAIL_VERIFICATION_REQUIRED");
+    expect(await prisma.payment.count({ where: { memberId: member.id } })).toBe(0);
+    expect(await canReadMemberIdCard(member.userId)).toBe(false);
+    await expect(assertRegistrationEmailVerified(member.userId)).rejects.toThrow(
+      "Verify your email",
+    );
+    // Represents successful OTP verification within this isolated fixture only.
+    await prisma.user.update({
+      where: { id: member.userId },
+      data: { emailVerifiedAt: new Date() },
+    });
+    await expect(assertRegistrationEmailVerified(member.userId)).resolves.toBeUndefined();
+    expect(registered.memberExternalId).toBe(member.externalId);
+  }, 180000);
+
+  it("reconciles a legacy member's captured first fee once, issuing a receipt, pack, audit and paid ID access", async () => {
+    const { member } = await fixture();
+    const due = await prisma.due.findUniqueOrThrow({ where: { id: member.registrationDueId! } });
+    await prisma.member.update({ where: { id: member.id }, data: { registrationDueId: null } });
+    const payment = await createPaymentCommand({
+      memberId: member.id,
+      dueId: due.id,
+      method: "ONLINE",
+      idempotencyKey: crypto.randomUUID(),
+      actorId: member.userId,
+    });
+    const orderId = `order_${payment.externalId.replaceAll("-", "")}`;
+    const captureId = `pay_${payment.externalId.replaceAll("-", "")}`;
+    await prisma.payment.update({ where: { id: payment.id }, data: { providerOrderId: orderId } });
+    const provider = new RazorpayPaymentProvider(
+      { keyId: "rzp_test_isolated", keySecret: "test-secret", webhookSecret: "test-webhook" },
+      async (input) =>
+        Response.json(
+          String(input).endsWith("/payments")
+            ? {
+                items: [
+                  {
+                    id: captureId,
+                    order_id: orderId,
+                    amount: 36900,
+                    currency: "INR",
+                    captured: true,
+                    status: "captured",
+                    amount_refunded: 0,
+                  },
+                ],
+              }
+            : {
+                id: orderId,
+                amount: 36900,
+                currency: "INR",
+                status: "paid",
+                amount_paid: 36900,
+                amount_due: 0,
+              },
+        ),
+    );
+    const first = await reconcileOwnedOnlinePayment(
+      member.userId,
+      payment.externalId,
+      undefined,
+      provider,
+    );
+    expect(first.status).toBe("SUCCEEDED");
+    expect(
+      await reconcileOwnedOnlinePayment(member.userId, payment.externalId, undefined, provider),
+    ).toEqual(first);
+    expect(await prisma.receipt.count({ where: { paymentId: payment.id } })).toBe(1);
+    expect(await prisma.membershipPack.count({ where: { paymentId: payment.id } })).toBe(1);
+    expect(await canReadMemberIdCard(member.userId)).toBe(true);
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: due.id } })).status).toBe("PAID");
+    const audit = await prisma.auditLog.findMany({
+      where: { entityId: payment.id, action: "PAYMENT_PROVIDER_RECONCILED" },
+    });
+    expect(audit).toHaveLength(1);
+    expect(audit[0].actorRole).toBe("SYSTEM");
+    expect((await readOwnMembershipPack(member.userId))?.certificateNumber).toBeTruthy();
+  }, 180000);
   it("requires an active Admin, explicit received-funds confirmation and a reason; an offline confirmation produces real records only once", async () => {
     const { member } = await fixture();
     const admin = await prisma.user.create({

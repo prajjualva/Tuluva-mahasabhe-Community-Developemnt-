@@ -22,6 +22,7 @@ export const readPageSession = cache(async () => {
                 ? "/member"
                 : "/access-denied";
     return {
+      userId: principal.userId,
       dashboard,
       permissions,
       coordinatorActive,

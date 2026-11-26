@@ -2,6 +2,7 @@ import { addUtcCalendarMonths, membershipBillingCycle } from "../../domain/calen
 import { prisma } from "../database/prisma";
 import { effectiveSchemeNumber } from "../database/scheme-policy";
 import { readOwnProfile } from "./profile-service";
+import { canReadMemberIdCard, MembershipCardPaymentRequiredError } from "./member-card-access";
 
 export function cardValidity(input: {
   status: string;
@@ -42,6 +43,7 @@ export function cardValidity(input: {
 }
 
 export async function readOwnMemberCard(userId: string, now = new Date()) {
+  if (!(await canReadMemberIdCard(userId))) throw new MembershipCardPaymentRequiredError();
   const profile = await readOwnProfile(userId);
   const details = await prisma.member.findUniqueOrThrow({
     where: { userId },

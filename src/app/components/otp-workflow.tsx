@@ -6,9 +6,11 @@ type Purpose =
 export function OtpWorkflow({
   member = false,
   emailOnly = false,
+  registration = false,
 }: {
   member?: boolean;
   emailOnly?: boolean;
+  registration?: boolean;
 }) {
   const [purpose, setPurpose] = useState<Purpose>(member ? "VERIFY_EMAIL" : "LOGIN");
   const [channel, setChannel] = useState("EMAIL");
@@ -79,7 +81,11 @@ export function OtpWorkflow({
   return (
     <article>
       <h2>
-        {member ? "Contact verification and changes" : "Sign in with a code / reset password"}
+        {registration
+          ? "Verify your email"
+          : member
+            ? "Contact verification and changes"
+            : "Sign in with a code / reset password"}
       </h2>
       {member && emailOnly && (
         <p>Phone verification and phone-number changes are unavailable during the pilot.</p>
@@ -87,30 +93,32 @@ export function OtpWorkflow({
       <p role="status">{message}</p>
       <form onSubmit={requestCode}>
         <fieldset disabled={busy}>
-          <label>
-            Action
-            <select
-              value={purpose}
-              onChange={(event) => {
-                setPurpose(event.target.value as Purpose);
-                setChallenge("");
-              }}
-            >
-              {member ? (
-                <>
-                  <option value="VERIFY_EMAIL">Verify my email</option>
-                  {!emailOnly && <option value="VERIFY_MOBILE">Verify my mobile</option>}
-                  <option value="CHANGE_EMAIL">Change email</option>
-                  {!emailOnly && <option value="CHANGE_MOBILE">Change mobile</option>}
-                </>
-              ) : (
-                <>
-                  <option value="LOGIN">Sign in with a code</option>
-                  <option value="PASSWORD_RESET">Reset password</option>
-                </>
-              )}
-            </select>
-          </label>
+          {!registration && (
+            <label>
+              Action
+              <select
+                value={purpose}
+                onChange={(event) => {
+                  setPurpose(event.target.value as Purpose);
+                  setChallenge("");
+                }}
+              >
+                {member ? (
+                  <>
+                    <option value="VERIFY_EMAIL">Verify my email</option>
+                    {!emailOnly && <option value="VERIFY_MOBILE">Verify my mobile</option>}
+                    <option value="CHANGE_EMAIL">Change email</option>
+                    {!emailOnly && <option value="CHANGE_MOBILE">Change mobile</option>}
+                  </>
+                ) : (
+                  <>
+                    <option value="LOGIN">Sign in with a code</option>
+                    <option value="PASSWORD_RESET">Reset password</option>
+                  </>
+                )}
+              </select>
+            </label>
+          )}
           {!member && !emailOnly && (
             <label>
               Send code by

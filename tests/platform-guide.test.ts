@@ -58,6 +58,7 @@ describe("platform guide", () => {
   });
   it("renders the member guide and member shortcuts for a signed-in member", async () => {
     vi.mocked(readPageSession).mockResolvedValue({
+      userId: "member-test-user",
       dashboard: "/member",
       permissions: new Set(["member:profile:read"]),
       coordinatorActive: false,

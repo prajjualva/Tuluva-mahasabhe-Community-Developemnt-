@@ -18,9 +18,15 @@ import { prisma } from "../../../../server/database/prisma";
 import { memberPaymentRequestSchema } from "../../../../server/payments/member-payment-request";
 import { walletSettlementDto } from "../../../../server/payments/payment-dto";
 import { scheduleNotificationDelivery } from "../../../../server/notifications/notification-delivery-service";
+import {
+  assertRegistrationEmailVerified,
+  RegistrationEmailVerificationRequiredError,
+} from "../../../../server/members/registration-verification";
 export async function POST(request: NextRequest) {
   try {
     const principal = await requireApiPermission(request, "member:profile:write");
+    if (principal.onboardingPaymentRequired)
+      await assertRegistrationEmailVerified(principal.userId);
     const body = memberPaymentRequestSchema.parse(await request.json());
     if (
       principal.onboardingPaymentRequired &&
@@ -139,6 +145,11 @@ export async function POST(request: NextRequest) {
       amountPaise: payment.amountPaise,
     });
   } catch (error) {
+    if (error instanceof RegistrationEmailVerificationRequiredError)
+      return NextResponse.json(
+        { error: error.message, code: "EMAIL_VERIFICATION_REQUIRED" },
+        { status: 403 },
+      );
     if (error instanceof PaymentProviderRequestError)
       return NextResponse.json(
         { error: "The payment provider could not create a checkout order" },

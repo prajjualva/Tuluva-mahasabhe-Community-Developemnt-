@@ -82,7 +82,7 @@ export async function requireApiPermission(request: NextRequest, permission: str
   const allowed = onboardingPathAllowed(request.nextUrl.pathname, request.method);
   const principal = await requirePermissionForAccessToken(token, permission, allowed);
   if (principal.onboardingPaymentRequired && !principal.permissions.has("admin:*")) {
-    const match = /^\/api\/member\/payments\/([0-9a-f-]{36})\/(resume|cancel)$/i.exec(
+    const match = /^\/api\/member\/payments\/([0-9a-f-]{36})\/(resume|cancel|verify)$/i.exec(
       request.nextUrl.pathname,
     );
     if (match) {

@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
         createdAt: true,
         receipt: { select: { receiptNumber: true } },
         refund: { select: { status: true } },
+        membershipPack: { select: { externalId: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -31,6 +32,14 @@ export async function GET(request: NextRequest) {
         status: payment.refund?.status === "SUCCEEDED" ? "REFUNDED" : payment.status,
         createdAt: payment.createdAt,
         receipt: payment.receipt,
+        membershipDocumentsAvailable:
+          !!payment.membershipPack &&
+          payment.status === "SUCCEEDED" &&
+          payment.refund?.status !== "SUCCEEDED",
+        canVerify:
+          payment.method === "ONLINE" &&
+          !!payment.providerOrderId &&
+          ["PENDING", "FAILED"].includes(payment.status),
         canCancel:
           payment.status === "PENDING" &&
           payment.method === "ONLINE" &&

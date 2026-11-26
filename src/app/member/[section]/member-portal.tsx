@@ -5,7 +5,11 @@ import { MemberCommunications } from "../member-communications";
 import { MemberProfile } from "../member-profile";
 import { readMemberRecord } from "../member-record-loader";
 import { paymentStartFeedback, paymentPurposeLabel } from "../payment-feedback";
-import { openGatewayCheckout, type Checkout } from "../../components/gateway-checkout";
+import {
+  openGatewayCheckout,
+  verifyGatewayPayment,
+  type Checkout,
+} from "../../components/gateway-checkout";
 
 function readVisibleRecord<T>(visible: boolean, path: string) {
   return visible ? readMemberRecord<T>(path) : Promise.resolve(null);
@@ -93,6 +97,9 @@ export function MemberPortal({ section }: { section: string }) {
       method: string;
       canCancel: boolean;
       canResume: boolean;
+      canVerify?: boolean;
+      receipt?: { receiptNumber: string } | null;
+      membershipDocumentsAvailable?: boolean;
     }>
   >([]);
   const [receipts, setReceipts] = useState<Array<{ receiptNumber: string; issuedAt: string }>>([]);
@@ -137,7 +144,7 @@ export function MemberPortal({ section }: { section: string }) {
           "/api/member/wallet/activity?limit=20",
         ),
         readVisibleRecord<typeof payments>(
-          duesPage || paymentsPage,
+          duesPage || paymentsPage || dashboard,
           "/api/member/payments/history",
         ),
         readVisibleRecord<typeof receipts>(paymentsPage || dashboard, "/api/member/receipts"),
@@ -194,9 +201,11 @@ export function MemberPortal({ section }: { section: string }) {
     };
     if (result.ok && data.checkout) {
       try {
-        await openGatewayCheckout(data.checkout);
+        const outcome = await openGatewayCheckout(data.checkout);
         setMessage(
-          "Gateway checkout opened. Your payment will be confirmed only after the verified provider webhook arrives.",
+          outcome.status === "SUCCEEDED"
+            ? `Payment received successfully. ${outcome.receiptNumber ? `Receipt ${outcome.receiptNumber} is ready.` : "Your payment history is updated."}`
+            : "Payment is awaiting confirmation. If your bank was debited, do not pay again; use Check payment status.",
         );
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Payment checkout is unavailable");
@@ -220,11 +229,26 @@ export function MemberPortal({ section }: { section: string }) {
     await handlePaymentStart(result, "Wallet payment settled and receipt issued.");
   };
   const resumePayment = async (paymentExternalId: string) => {
+    const verified = await verifyGatewayPayment(paymentExternalId);
+    if (verified.status === "SUCCEEDED") {
+      setMessage("Payment received successfully. Your receipt is ready.");
+      await load();
+      return;
+    }
     const response = await fetch(
       `/api/member/payments/${encodeURIComponent(paymentExternalId)}/resume`,
       { method: "POST" },
     );
     await handlePaymentStart(response, "Wallet payment settled.");
+  };
+  const checkPayment = async (paymentExternalId: string) => {
+    const verified = await verifyGatewayPayment(paymentExternalId);
+    setMessage(
+      verified.status === "SUCCEEDED"
+        ? "Payment received successfully. Your receipt and membership records are updated."
+        : "Payment is not yet confirmed. Do not pay again if your bank was debited; check again shortly.",
+    );
+    await load();
   };
   const payContribution = async (method: "ONLINE" | "WALLET", eventExternalId?: string) => {
     const result = await fetch("/api/member/contributions/pay", {
@@ -339,6 +363,18 @@ export function MemberPortal({ section }: { section: string }) {
           </p>
         )}
         {section === "dashboard" && <MemberProfile summary />}
+        {dashboard && payments.some((payment) => payment.status === "SUCCEEDED") && (
+          <article className="payment-success-summary" role="status">
+            <h2>Payment received successfully</h2>
+            <p>Your confirmed payment and official receipt are available in your account.</p>
+            <div className="onboarding-actions">
+              <Link href="/member/payments-receipts">View payment & receipt</Link>
+              {payments.some((payment) => payment.membershipDocumentsAvailable) && (
+                <Link href="/member/membership-documents">Membership ID card & certificate</Link>
+              )}
+            </div>
+          </article>
+        )}
         {section === "dashboard" && (
           <div className="grid member-quick-links">
             <Link href="/member/dues">
@@ -603,6 +639,11 @@ export function MemberPortal({ section }: { section: string }) {
                   {payment.canResume && (
                     <button onClick={() => void runAction(() => resumePayment(payment.externalId))}>
                       Resume checkout
+                    </button>
+                  )}
+                  {payment.canVerify && (
+                    <button onClick={() => void runAction(() => checkPayment(payment.externalId))}>
+                      Check payment status
                     </button>
                   )}
                 </p>

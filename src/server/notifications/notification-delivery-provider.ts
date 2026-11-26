@@ -20,7 +20,7 @@ const summaries: Record<string, [string, string]> = {
   ],
   REGISTRATION: [
     "Tuluva Mahasabhe account created",
-    "Your registration was received. Sign in to complete your initial membership payment. If you did not register, ignore this email.",
+    "Your registration was received. Sign in, verify your email, then complete your initial membership payment. If you did not register, ignore this email.",
   ],
   MEMBERSHIP_ACTIVATED: [
     "Welcome to Tuluva Mahasabhe",

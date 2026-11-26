@@ -10,10 +10,12 @@ export function ProfilePhoto({
   fullName,
   photoUpdatedAt,
   onPhotoChanged,
+  canViewIdCard = false,
 }: {
   fullName: string;
   photoUpdatedAt: string | null;
   onPhotoChanged: (updatedAt: string | null) => void;
+  canViewIdCard?: boolean;
 }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -81,7 +83,7 @@ export function ProfilePhoto({
             ? "Use this photo on your member ID card."
             : "Add a clear photo of yourself to create your member ID card."}
         </p>
-        {photoUpdatedAt && <Link href="/member/id-card">View my ID card →</Link>}
+        {photoUpdatedAt && canViewIdCard && <Link href="/member/id-card">View my ID card →</Link>}
         <form onSubmit={submit} className="profile-photo-form">
           <label htmlFor="member-photo-file">Choose a photo</label>
           <input

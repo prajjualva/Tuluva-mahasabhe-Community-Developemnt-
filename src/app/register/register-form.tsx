@@ -43,7 +43,8 @@ export default function RegisterForm() {
       <p className="eyebrow">MEMBER REGISTRATION</p>
       <h1>Become a member</h1>
       <p className="page-description">
-        Create your account, then complete your membership payment to open your member workspace.
+        Create your account, verify your email, then complete your membership payment to open your
+        member workspace.
       </p>
       <form className="auth-form" onSubmit={submit}>
         <label>
@@ -90,9 +91,9 @@ export default function RegisterForm() {
           />
         </label>
         <small>
-          Use at least 12 characters for your password. Next, pay your initial membership fee. Your
-          ID card, membership certificate and payment receipt will be sent to your verified email
-          after payment is confirmed.
+          Use at least 12 characters for your password. Next, verify your email and pay your initial
+          membership fee. Your ID card, membership certificate and payment receipt will be sent to
+          your verified email after payment is confirmed.
         </small>
         <button type="submit" disabled={busy}>
           {busy ? "Creating your account…" : "Create member account"}

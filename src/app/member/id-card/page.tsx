@@ -3,10 +3,31 @@ import { requirePagePermission } from "../../../server/http/page-authorize";
 import { readOwnMemberCard } from "../../../server/members/member-card-service";
 import { MemberIdCard } from "./member-id-card";
 import { isReviewWorkspace } from "../../../server/deployment/review-environment";
+import { MembershipCardPaymentRequiredError } from "../../../server/members/member-card-access";
 
 export default async function MemberIdCardPage() {
   const actor = await requirePagePermission("member:profile:read", "/member/id-card");
-  const profile = await readOwnMemberCard(actor.userId);
+  let profile;
+  try {
+    profile = await readOwnMemberCard(actor.userId);
+  } catch (error) {
+    if (!(error instanceof MembershipCardPaymentRequiredError)) throw error;
+    return (
+      <main>
+        <h1>Member ID card</h1>
+        <article>
+          <h2>Membership payment required</h2>
+          <p>
+            Your member ID card becomes available after verified membership payment or an approved
+            Foundation fee exemption.
+          </p>
+          <Link className="button-link" href="/member/dues">
+            View membership payment
+          </Link>
+        </article>
+      </main>
+    );
+  }
 
   return (
     <main>

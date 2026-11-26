@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { prisma } from "../src/server/database/prisma";
 import { readOwnMemberCard } from "../src/server/members/member-card-service";
+import { settlePayment } from "../src/server/payments/payment-service";
 
 const databaseDescribe = process.env.RUN_DB_INTEGRATION_TESTS === "1" ? describe : describe.skip;
 databaseDescribe("database-backed membership ID card", () => {
@@ -15,16 +16,27 @@ databaseDescribe("database-backed membership ID card", () => {
       },
     });
     const now = new Date("2026-11-19T12:00:00Z");
-    await prisma.due.create({
+    const due = await prisma.due.create({
       data: {
         memberId: member.id,
         purpose: "MEMBERSHIP",
         amountPaise: 36900,
-        status: "PAID",
+        status: "PENDING",
         createdAt: now,
         dueAt: new Date("2026-05-29T12:00:00Z"),
       },
     });
+    await expect(readOwnMemberCard(member.userId, now)).rejects.toThrow("membership payment");
+    const payment = await prisma.payment.create({
+      data: {
+        memberId: member.id,
+        dueId: due.id,
+        method: "MANUAL",
+        amountPaise: 36900,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    await settlePayment(payment.id, undefined, `TEST-CARD-${payment.externalId}`);
     const original = await readOwnMemberCard(member.userId, now);
     expect(original.designation).toBe("Member");
     expect(original.validity).toEqual({ label: "Valid until", value: "28 Feb 2027" });

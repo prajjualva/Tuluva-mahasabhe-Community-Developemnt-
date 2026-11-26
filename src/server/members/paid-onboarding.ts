@@ -52,7 +52,7 @@ export function onboardingPathAllowed(pathname: string, method: string) {
   if (pathname === "/api/member/onboarding" && method === "GET") return true;
   if (pathname === "/api/member/payments" && method === "POST") return true;
   if (
-    /^\/api\/member\/payments\/[0-9a-f-]{36}\/(resume|cancel)$/i.test(pathname) &&
+    /^\/api\/member\/payments\/[0-9a-f-]{36}\/(resume|cancel|verify)$/i.test(pathname) &&
     method === "POST"
   )
     return true;
