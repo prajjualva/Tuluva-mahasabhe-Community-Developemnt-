@@ -345,6 +345,7 @@ afterAll(async () => {
   });
   await prisma.cashCollection.deleteMany({ where: { coordinatorId: { in: coordinatorIds } } });
   await prisma.receipt.deleteMany({ where: { payment: { memberId: { in: memberIds } } } });
+  await prisma.membershipPack.deleteMany({ where: { memberId: { in: memberIds } } });
   await prisma.payment.deleteMany({ where: { memberId: { in: memberIds } } });
   await prisma.due.deleteMany({ where: { memberId: { in: memberIds } } });
   await prisma.coordinatorLifecycleEvent.deleteMany({

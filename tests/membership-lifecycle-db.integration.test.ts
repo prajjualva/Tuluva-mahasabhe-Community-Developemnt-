@@ -310,6 +310,8 @@ afterAll(async () => {
   await prisma.walletTransaction.deleteMany({ where: { wallet: { memberId: { in: members } } } });
   await prisma.wallet.deleteMany({ where: { memberId: { in: members } } });
   await prisma.receipt.deleteMany({ where: { payment: { memberId: { in: members } } } });
+  // Isolated fixture snapshots now include packs issued for legacy initial fees.
+  await prisma.membershipPack.deleteMany({ where: { memberId: { in: members } } });
   await prisma.payment.deleteMany({ where: { memberId: { in: members } } });
   await prisma.due.deleteMany({ where: { memberId: { in: members } } });
   await prisma.communitySupportPlan.deleteMany({ where: { memberId: { in: members } } });

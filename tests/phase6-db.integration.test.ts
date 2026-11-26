@@ -58,7 +58,10 @@ afterAll(async () => {
       await tx.foundationLedger.deleteMany({ where: { authorizedActorId: created.userId } });
       if (created.paymentId)
         await tx.receipt.deleteMany({ where: { paymentId: created.paymentId } });
-      if (created.paymentId) await tx.payment.deleteMany({ where: { id: created.paymentId } });
+      if (created.paymentId) {
+        await tx.membershipPack.deleteMany({ where: { paymentId: created.paymentId } });
+        await tx.payment.deleteMany({ where: { id: created.paymentId } });
+      }
       if (created.dueId) await tx.due.deleteMany({ where: { id: created.dueId } });
       await tx.auditLog.deleteMany({ where: { actorId: created.userId } });
       if (created.memberId) await tx.member.deleteMany({ where: { id: created.memberId } });

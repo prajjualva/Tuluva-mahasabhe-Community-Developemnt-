@@ -213,6 +213,7 @@ afterAll(async () => {
     await prisma.wallet.delete({ where: { id: wallet.id } });
   }
   await prisma.foundationLedger.deleteMany({ where: { authorizedActorId: created.userId } });
+  await prisma.membershipPack.deleteMany({ where: { memberId: created.memberId } });
   await prisma.payment.deleteMany({ where: { memberId: created.memberId } });
   if (created.dueIds.length) await prisma.due.deleteMany({ where: { id: { in: created.dueIds } } });
   if (created.planId)

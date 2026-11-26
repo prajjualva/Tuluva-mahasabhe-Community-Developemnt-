@@ -129,8 +129,10 @@ afterAll(async () => {
     await prisma.walletTransaction.deleteMany({ where: { walletId: wallet.id } });
     await prisma.wallet.delete({ where: { id: wallet.id } });
   }
-  if (created.paymentIds.length)
+  if (created.paymentIds.length) {
+    await prisma.membershipPack.deleteMany({ where: { paymentId: { in: created.paymentIds } } });
     await prisma.payment.deleteMany({ where: { id: { in: created.paymentIds } } });
+  }
   if (created.dueIds.length) await prisma.due.deleteMany({ where: { id: { in: created.dueIds } } });
   if (created.memberId) await prisma.member.deleteMany({ where: { id: created.memberId } });
   await prisma.user.deleteMany({ where: { id: created.userId } });
