@@ -71,6 +71,7 @@ export interface PaymentProvider {
     orderId: string,
     amountPaise: number,
   ): Promise<VerifiedOrderCapture | null>;
+  assertOrderUnpaid(orderId: string, amountPaise: number): Promise<void>;
 }
 
 export type VerifiedOrderCapture = {
@@ -165,6 +166,54 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     private readonly config: RazorpayConfig,
     private readonly fetchImplementation: FetchLike = fetch,
   ) {}
+
+  /** Conservative evidence for an explicitly approved fee exemption, never proof of payment. */
+  async assertOrderUnpaid(orderId: string, amountPaise: number): Promise<void> {
+    if (
+      !/^order_[A-Za-z0-9]+$/.test(orderId) ||
+      !Number.isSafeInteger(amountPaise) ||
+      amountPaise <= 0
+    )
+      throw new PaymentProviderRequestError("Invalid provider verification request");
+    const read = async (path: string) => {
+      const response = await this.fetchImplementation(`https://api.razorpay.com/v1/${path}`, {
+        headers: {
+          authorization: `Basic ${Buffer.from(`${this.config.keyId}:${this.config.keySecret}`).toString("base64")}`,
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok)
+        throw new PaymentProviderRequestError("Payment verification is unavailable");
+      return response.json();
+    };
+    const order = z.object({
+      id: z.literal(orderId),
+      amount: z.literal(amountPaise),
+      currency: z.literal("INR"),
+      status: z.enum(["created", "attempted"]),
+      amount_paid: z.literal(0),
+      amount_due: z.literal(amountPaise),
+    });
+    order.parse(await read(`orders/${encodeURIComponent(orderId)}`));
+    const payments = z
+      .object({
+        count: z.number().int().nonnegative(),
+        items: z.array(
+          z.object({
+            order_id: z.literal(orderId),
+            amount: z.literal(amountPaise),
+            currency: z.literal("INR"),
+            status: z.literal("failed"),
+            captured: z.literal(false),
+            amount_refunded: z.literal(0),
+          }),
+        ),
+      })
+      .parse(await read(`orders/${encodeURIComponent(orderId)}/payments`));
+    if (payments.count !== payments.items.length || payments.count >= 10)
+      throw new PaymentProviderRequestError("The complete order history must be reconciled first");
+  }
 
   async findCapturedOrderPayment(
     orderId: string,

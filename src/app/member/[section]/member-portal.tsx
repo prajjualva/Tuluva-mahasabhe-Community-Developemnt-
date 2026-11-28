@@ -98,6 +98,7 @@ export function MemberPortal({ section }: { section: string }) {
       canCancel: boolean;
       canResume: boolean;
       canVerify?: boolean;
+      feeExempted?: boolean;
       receipt?: { receiptNumber: string } | null;
       membershipDocumentsAvailable?: boolean;
     }>
@@ -631,6 +632,13 @@ export function MemberPortal({ section }: { section: string }) {
               displayPayments.map((payment) => (
                 <p key={payment.externalId}>
                   {payment.method} · {money(payment.amountPaise)} · {payment.status}
+                  {payment.feeExempted && payment.status === "PENDING" && (
+                    <span className="member-record-note">
+                      {" "}
+                      · Fee exempted. The previous checkout is retained for reconciliation; no
+                      payment is required for this fee.
+                    </span>
+                  )}
                   {payment.canCancel && (
                     <button onClick={() => void runAction(() => cancelPayment(payment.externalId))}>
                       Cancel payment

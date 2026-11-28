@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { coordinatorAppointmentState } from "../../domain/coordinator-appointment";
 import { prisma } from "../database/prisma";
 
 export async function adminDashboardSnapshot() {
@@ -196,6 +197,17 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
       joinedAt: true,
       closedAt: true,
       deceasedAt: true,
+      coordinatorProfile: { select: { externalId: true } },
+      _count: {
+        select: {
+          payments: {
+            where: {
+              status: "PENDING",
+              due: { purpose: { in: ["MEMBERSHIP", "PLAN_REGISTRATION"] } },
+            },
+          },
+        },
+      },
       user: {
         select: {
           externalId: true,
@@ -256,6 +268,7 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
           method: true,
           status: true,
           createdAt: true,
+          due: { select: { purpose: true, status: true } },
           receipt: { select: { receiptNumber: true, issuedAt: true } },
           refund: { select: { externalId: true, status: true, amountPaise: true } },
         },
@@ -336,7 +349,7 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
       entityId: member.id,
     },
   });
-  const { id: internalId, ...safe } = member;
+  const { id: internalId, _count, coordinatorProfile, ...safe } = member;
   void internalId;
   const [historyCoordinators, historyActors] = await Promise.all([
     prisma.coordinator.findMany({
@@ -371,6 +384,11 @@ export async function adminMemberDetail(externalId: string, actorId: string) {
   };
   return {
     ...safe,
+    coordinatorAppointment: coordinatorAppointmentState({
+      memberStatus: member.status,
+      hasCoordinatorProfile: Boolean(coordinatorProfile),
+      pendingFeePayments: _count.payments,
+    }),
     transfers: member.transfers.map(
       ({ effectiveAt, reason, fromCoordinatorId, toCoordinatorId, actorId }) => {
         const actor = historyActors.find((row) => row.id === actorId);

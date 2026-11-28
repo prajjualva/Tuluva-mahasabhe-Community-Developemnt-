@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { effectiveSchemeNumber } from "../database/scheme-policy";
 import { addUtcCalendarMonths } from "../../domain/calendar";
+import {
+  coordinatorAppointmentState,
+  CoordinatorAppointmentError,
+} from "../../domain/coordinator-appointment";
 
 /** Appointment exempts ₹369/₹1,000 fees; the Coordinator's ₹100 obligations are untouched. */
 export async function applyCoordinatorFeeExemption(
@@ -9,16 +13,24 @@ export async function applyCoordinatorFeeExemption(
   actorId: string | null,
   reason: string,
   now = new Date(),
+  verifiedUnpaidPaymentIds: string[] = [],
 ) {
   const pendingFeePayment = await tx.payment.count({
     where: {
       memberId,
       status: "PENDING",
+      id: { notIn: verifiedUnpaidPaymentIds },
       due: { purpose: { in: ["MEMBERSHIP", "PLAN_REGISTRATION"] } },
     },
   });
-  if (pendingFeePayment)
-    throw new Error("Resolve pending membership/plan payments before Coordinator appointment");
+  if (pendingFeePayment) {
+    const state = coordinatorAppointmentState({
+      memberStatus: "ACTIVE",
+      hasCoordinatorProfile: false,
+      pendingFeePayments: pendingFeePayment,
+    });
+    throw new CoordinatorAppointmentError("FEES_PENDING", state.message);
+  }
   const waived = await tx.due.updateMany({
     where: {
       memberId,
@@ -61,7 +73,11 @@ export async function applyCoordinatorFeeExemption(
       entityType: "Member",
       entityId: memberId,
       reason,
-      afterState: { waivedFeeDues: waived.count, contributionObligationsPreserved: true },
+      afterState: {
+        waivedFeeDues: waived.count,
+        contributionObligationsPreserved: true,
+        pendingOnlineOrdersRetained: verifiedUnpaidPaymentIds.length,
+      },
     },
   });
 }

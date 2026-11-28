@@ -1,7 +1,8 @@
 "use client";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { readRecord } from "../components/read-record";
-import { paymentPurposeLabel } from "../member/payment-feedback";
+import { AdminMemberFinancialRecords, recordStatusLabel } from "./member-financial-records";
+import type { CoordinatorAppointmentState } from "../../domain/coordinator-appointment";
 
 type Member = {
   externalId: string;
@@ -20,6 +21,7 @@ type Member = {
   coordinator: { externalId: string; referralCode: string; member: { fullName: string } } | null;
 };
 type Detail = Member & {
+  coordinatorAppointment: CoordinatorAppointmentState;
   address: string;
   memberships: { status: string; startedAt: string; endedAt: string | null }[];
   plans: { externalId: string; status: string; waitingEndsAt: string | null }[];
@@ -35,6 +37,8 @@ type Detail = Member & {
     amountPaise: number;
     method: string;
     status: string;
+    createdAt: string;
+    due: { purpose: string; status: string } | null;
     receipt: { receiptNumber: string } | null;
   }[];
   wallet: {
@@ -91,6 +95,8 @@ export function AdminMemberManagement() {
   const [message, setMessage] = useState("");
   const [coordinators, setCoordinators] = useState<Coordinator[]>([]);
   const [busy, setBusy] = useState(false);
+  const [appointmentMessage, setAppointmentMessage] = useState("");
+  const appointmentKey = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [choicesStatus, setChoicesStatus] = useState<"loading" | "ready" | "unavailable">(
@@ -135,6 +141,8 @@ export function AdminMemberManagement() {
   const open = async (id: string, refresh = false) => {
     if (!refresh && commandLock.current) return;
     if (!refresh) {
+      setAppointmentMessage("");
+      appointmentKey.current = null;
       commandLock.current = true;
       setBusy(true);
     }
@@ -158,6 +166,8 @@ export function AdminMemberManagement() {
     event.preventDefault();
     if (commandLock.current) return;
     const form = new FormData(event.currentTarget);
+    const isAppointment = path === "/api/admin/coordinators";
+    if (isAppointment) setAppointmentMessage("Checking payment status and applying appointment…");
     commandLock.current = true;
     setBusy(true);
     try {
@@ -168,11 +178,17 @@ export function AdminMemberManagement() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Action denied");
-      setMessage("Change saved with Admin identity, timestamp and reason.");
+      if (isAppointment)
+        setAppointmentMessage(
+          "Coordinator appointed. Access and unpaid-fee exemptions were applied together.",
+        );
+      else setMessage("Change saved with Admin identity, timestamp and reason.");
       await load();
       if (detail) await open(detail.externalId, true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Change failed");
+      const feedback = error instanceof Error ? error.message : "Change failed";
+      if (isAppointment) setAppointmentMessage(feedback);
+      else setMessage(feedback);
     } finally {
       commandLock.current = false;
       setBusy(false);
@@ -270,12 +286,23 @@ export function AdminMemberManagement() {
         Next members
       </button>
       {detail && (
-        <article>
-          <h3>{detail.fullName}</h3>
-          <button onClick={() => setDetail(null)}>Close profile</button>
-          <p>
-            {detail.externalId} · {detail.status}
-          </p>
+        <article className="admin-member-profile">
+          <div className="member-profile-heading">
+            <div>
+              <p className="eyebrow">Member profile</p>
+              <h3>{detail.fullName}</h3>
+              <span className="member-record-status" data-status={detail.status}>
+                {recordStatusLabel(detail.status)}
+              </span>
+            </div>
+            <button className="secondary" onClick={() => setDetail(null)}>
+              Close profile
+            </button>
+          </div>
+          <details className="member-record-reference">
+            <summary>Member reference</summary>
+            <code>{detail.externalId}</code>
+          </details>
           <p>{detail.address}</p>
           <p>
             {detail.user.email} · {detail.user.mobile}
@@ -310,7 +337,7 @@ export function AdminMemberManagement() {
             ))}
             {detail.plans.map((plan) => (
               <p key={plan.externalId}>
-                Plan {plan.externalId} · {plan.status}
+                Community Support Plan · {recordStatusLabel(plan.status)}
                 {plan.waitingEndsAt
                   ? ` · Initial waiting ends ${new Date(plan.waitingEndsAt).toLocaleDateString("en-IN")}`
                   : ""}
@@ -319,29 +346,7 @@ export function AdminMemberManagement() {
           </details>
           <details>
             <summary>Dues, payments and receipts</summary>
-            {detail.dues.map((due) => (
-              <p key={due.externalId}>
-                {paymentPurposeLabel(due.purpose)} · {money(due.amountPaise)} · {due.status} ·{" "}
-                {new Date(due.dueAt).toLocaleDateString("en-IN")}
-              </p>
-            ))}
-            {detail.payments.map((payment) => (
-              <p key={payment.externalId}>
-                {payment.externalId} · {money(payment.amountPaise)} · {payment.method} ·{" "}
-                {payment.status}
-                <br />
-                Receipt:{" "}
-                {payment.receipt ? (
-                  <a
-                    href={`/api/admin/receipts/${encodeURIComponent(payment.receipt.receiptNumber)}/download`}
-                  >
-                    {payment.receipt.receiptNumber} — download
-                  </a>
-                ) : (
-                  "Not issued"
-                )}
-              </p>
-            ))}
+            <AdminMemberFinancialRecords dues={detail.dues} payments={detail.payments} />
           </details>
           <details>
             <summary>Wallet and relevant activity</summary>
@@ -444,73 +449,82 @@ export function AdminMemberManagement() {
               )}
               <button disabled={busy || choicesStatus !== "ready"}>Save assignment</button>
             </form>
-            <form
-              onSubmit={(event) =>
-                void command(event, "/api/admin/coordinators", (form) => ({
-                  memberExternalId: detail.externalId,
-                  referralCode: form.get("referral"),
-                  reason: form.get("reason"),
-                }))
-              }
-            >
-              <h4>Appoint this member as a Coordinator</h4>
-              <label>
-                Referral code
-                <input
-                  name="referral"
-                  pattern="[A-Za-z0-9]{6,16}"
-                  minLength={6}
-                  maxLength={16}
-                  required
-                />
-              </label>
-              <label>
-                Appointment reason
-                <textarea name="reason" minLength={3} maxLength={1000} required />
-              </label>
-              <button disabled={busy}>Appoint Coordinator</button>
-            </form>
           </details>
           <details>
-            <summary>Roles and permissions</summary>
+            <summary>Appoint as Coordinator</summary>
+            <p>{detail.coordinatorAppointment.message}</p>
+            {detail.coordinatorAppointment.canAppoint && (
+              <form
+                onSubmit={(event) =>
+                  void command(event, "/api/admin/coordinators", (form) => ({
+                    memberExternalId: detail.externalId,
+                    referralCode: form.get("referral"),
+                    reason: form.get("reason"),
+                    applyFeeExemption: form.get("feeExemption") === "on",
+                    idempotencyKey:
+                      appointmentKey.current ?? (appointmentKey.current = crypto.randomUUID()),
+                  }))
+                }
+              >
+                <label>
+                  Referral code
+                  <input
+                    name="referral"
+                    pattern="[A-Za-z0-9]{6,16}"
+                    minLength={6}
+                    maxLength={16}
+                    required
+                  />
+                  <small>6–16 letters or numbers. This code is permanent.</small>
+                </label>
+                <label>
+                  Appointment reason
+                  <textarea name="reason" minLength={3} maxLength={1000} required />
+                </label>
+                <label className="consent-label">
+                  <input type="checkbox" name="feeExemption" required />
+                  <span>
+                    Apply the Coordinator exemption to unpaid membership and Community Support Plan
+                    registration fees.
+                  </span>
+                </label>
+                <p className="member-record-note">
+                  Paid fees remain recorded and are not refunded. Event contributions remain
+                  payable. Coordinator access is granted automatically with appointment.
+                </p>
+                <button disabled={busy}>
+                  {busy ? "Checking and appointing…" : "Exempt fees & appoint Coordinator"}
+                </button>
+              </form>
+            )}
+            <p role="status" className="member-action-feedback">
+              {appointmentMessage}
+            </p>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void open(detail.externalId, true)}
+            >
+              Refresh appointment status
+            </button>
+          </details>
+          <details>
+            <summary>Account access</summary>
             {detail.user.roles?.map((assignment) => (
               <p key={assignment.role.code}>
-                {assignment.role.code} · {assignment.active ? "Enabled" : "Disabled"}
-                <br />
-                {assignment.active &&
-                  assignment.role.permissions.map((row) => row.permission.code).join(", ")}
+                {recordStatusLabel(assignment.role.code)} ·{" "}
+                {assignment.active ? "Enabled" : "Disabled"}
               </p>
             ))}
-            <form
-              onSubmit={(event) =>
-                void command(event, `/api/admin/users/${detail.user.externalId}/roles`, (form) => ({
-                  roleCode: form.get("role"),
-                  active: form.get("active") === "true",
-                  reason: form.get("reason"),
-                }))
-              }
-            >
-              <label>
-                Role
-                <select name="role">
-                  <option>MEMBER</option>
-                  <option>COORDINATOR</option>
-                  <option>ADMIN</option>
-                </select>
-              </label>
-              <label>
-                Access
-                <select name="active">
-                  <option value="true">Enable</option>
-                  <option value="false">Revoke</option>
-                </select>
-              </label>
-              <label>
-                Reason
-                <textarea name="reason" minLength={3} maxLength={1000} required />
-              </label>
-              <button disabled={busy}>Update role permissions</button>
-            </form>
+            <p>
+              Coordinator permissions are granted by appointment. Use Coordinator management for
+              suspension or restoration.
+            </p>
+            <a href="#coordinators">Manage Coordinators →</a>
+            <p>
+              <a href="#access">Advanced account access →</a>
+            </p>
           </details>
         </article>
       )}

@@ -624,6 +624,124 @@ button.notification-open:hover {
   max-width: 100%;
   overflow-x: auto;
 }
+.admin-member-profile .member-profile-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.admin-member-profile .member-profile-heading h3 {
+  margin: 6px 0 12px;
+  font-size: 1.4rem;
+}
+.admin-member-profile .member-profile-heading .eyebrow {
+  margin: 0;
+}
+.member-financial-records {
+  display: grid;
+  gap: 26px;
+  margin-top: 20px;
+}
+.member-financial-records h4 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+.member-record-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.member-record-list > li {
+  border-top: 1px solid var(--line);
+  padding: 18px 0;
+}
+.member-record-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.member-record-heading > strong:first-child {
+  flex: 1 1 180px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.member-record-heading .member-record-amount {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.member-record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.member-record-status {
+  display: inline-block;
+  border-radius: 20px;
+  background: #f1f3ef;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.member-record-status[data-status="PAID"],
+.member-record-status[data-status="SUCCEEDED"],
+.member-record-status[data-status="ACTIVE"] {
+  color: #215a42;
+  background: #eaf4eb;
+}
+.member-record-status[data-status="PENDING"],
+.member-record-status[data-status="OVERDUE"] {
+  color: #735619;
+  background: #faf1d9;
+}
+.member-receipt-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.admin-member-profile .member-record-reference {
+  border: 0;
+  padding: 0;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.admin-member-profile .member-record-reference summary {
+  font-weight: 400;
+}
+.member-record-reference code {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 10px;
+  font-size: 0.75rem;
+}
+.admin-member-profile .member-record-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+.member-action-feedback:empty {
+  display: none;
+}
+.member-action-feedback {
+  border-left: 3px solid var(--green);
+  background: #f0f5ed;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+}
 .table-scroll table {
   border-collapse: collapse;
   width: 100%;

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/server/database/prisma";
 import {
   processMemberBilling,
@@ -13,6 +13,7 @@ import {
 } from "../src/server/payments/wallet-service";
 import { startPlanRegistration } from "../src/server/plans/plan-service";
 import { addUtcCalendarMonths } from "../src/domain/calendar";
+import { settlePayment } from "../src/server/payments/payment-service";
 
 const run = process.env.RUN_DB_INTEGRATION_TESTS === "1";
 const users: string[] = [];
@@ -256,6 +257,8 @@ async function fixture(status: "ACTIVE" | "INACTIVE" = "ACTIVE", joinedAt = new 
       memberExternalId: member.externalId,
       referralCode: `LC${marker.replaceAll("-", "").slice(0, 12)}`,
       reason: "Synthetic Coordinator appointment",
+      applyFeeExemption: true,
+      idempotencyKey: crypto.randomUUID(),
     });
     coordinators.push(
       (
@@ -289,6 +292,203 @@ async function fixture(status: "ACTIVE" | "INACTIVE" = "ACTIVE", joinedAt = new 
     ).rejects.toThrow("permanent");
     await processMemberBilling(member.id);
     expect(await prisma.due.count({ where: { memberId: member.id } })).toBe(3);
+  }, 120_000);
+  it("atomically exempts verified unpaid fees and grants Coordinator access, with replay and late-capture protection", async () => {
+    const { user, member, marker } = await fixture();
+    const plan = await prisma.communitySupportPlan.create({
+      data: { memberId: member.id, status: "PAYMENT_PENDING" },
+    });
+    const fee = await prisma.due.create({
+      data: {
+        memberId: member.id,
+        planId: plan.id,
+        purpose: "PLAN_REGISTRATION",
+        amountPaise: 100000,
+        dueAt: addUtcCalendarMonths(new Date(), 1),
+      },
+    });
+    const contribution = await prisma.due.create({
+      data: {
+        memberId: member.id,
+        purpose: "CONTRIBUTION",
+        amountPaise: 10000,
+        dueAt: addUtcCalendarMonths(new Date(), 1),
+      },
+    });
+    const pending = await prisma.payment.create({
+      data: {
+        memberId: member.id,
+        dueId: fee.id,
+        method: "ONLINE",
+        amountPaise: 100000,
+        providerOrderId: `order_${marker.replaceAll("-", "")}`,
+        idempotencyKey: `appointment-fee-${marker}`,
+      },
+    });
+    const command = {
+      memberExternalId: member.externalId,
+      referralCode: `EX${marker.replaceAll("-", "").slice(0, 10)}`,
+      reason: "Synthetic appointment and explicit exemption",
+      applyFeeExemption: true as const,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const provider = {
+      assertOrderUnpaid: vi.fn().mockRejectedValue(new Error("Funds or incomplete evidence")),
+    };
+    await expect(
+      createCoordinatorProfile(user.id, { ...command, applyFeeExemption: false }, provider),
+    ).rejects.toThrow();
+    await expect(createCoordinatorProfile(user.id, command, provider)).rejects.toMatchObject({
+      code: "FEES_PENDING",
+    });
+    expect(await prisma.coordinator.count({ where: { memberId: member.id } })).toBe(0);
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: fee.id } })).status).toBe("PENDING");
+    provider.assertOrderUnpaid.mockResolvedValue(undefined);
+    const result = await createCoordinatorProfile(user.id, command, provider);
+    const appointed = await prisma.coordinator.findUniqueOrThrow({
+      where: { externalId: result.externalId },
+    });
+    coordinators.push(appointed.id);
+    expect(provider.assertOrderUnpaid).toHaveBeenLastCalledWith(pending.providerOrderId, 100000);
+    expect(
+      await prisma.userRole.count({
+        where: { userId: user.id, active: true, role: { code: { in: ["MEMBER", "COORDINATOR"] } } },
+      }),
+    ).toBe(2);
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: fee.id } })).status).toBe("WAIVED");
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: contribution.id } })).status).toBe(
+      "PENDING",
+    );
+    expect(await prisma.receipt.count({ where: { paymentId: pending.id } })).toBe(0);
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: pending.id } })).providerOrderId,
+    ).toBe(pending.providerOrderId);
+    provider.assertOrderUnpaid.mockRejectedValue(new Error("Provider unavailable on replay"));
+    expect(await createCoordinatorProfile(user.id, command, provider)).toEqual(result);
+    await expect(
+      createCoordinatorProfile(user.id, { ...command, reason: "Changed command" }, provider),
+    ).rejects.toThrow("already used");
+    expect(
+      await prisma.auditLog.count({ where: { actorId: user.id, action: "COORDINATOR_APPOINTED" } }),
+    ).toBe(1);
+    const activePlan = await prisma.communitySupportPlan.findFirstOrThrow({
+      where: { memberId: member.id, status: "ACTIVE" },
+    });
+    expect(activePlan.waitingEndsAt).toEqual(addUtcCalendarMonths(activePlan.activatedAt!, 6));
+    await settlePayment(pending.id, user.id, `pay_late_${marker.replaceAll("-", "")}`);
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: fee.id } })).status).toBe("WAIVED");
+    expect(
+      await prisma.foundationLedger.count({
+        where: { relatedExternalId: pending.externalId, purpose: "UNAPPLIED_PAYMENT" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityId: pending.id, action: "UNAPPLIED_PAYMENT_REQUIRES_REFUND_REVIEW" },
+      }),
+    ).toBe(1);
+    expect(
+      (await prisma.communitySupportPlan.findUniqueOrThrow({ where: { id: activePlan.id } }))
+        .waitingEndsAt,
+    ).toEqual(activePlan.waitingEndsAt);
+  }, 120_000);
+
+  it("rechecks the database if a gateway capture commits during the unpaid-order check", async () => {
+    const { user, member, marker } = await fixture();
+    const plan = await prisma.communitySupportPlan.create({
+      data: { memberId: member.id, status: "PAYMENT_PENDING" },
+    });
+    const due = await prisma.due.create({
+      data: {
+        memberId: member.id,
+        planId: plan.id,
+        purpose: "PLAN_REGISTRATION",
+        amountPaise: 100000,
+        dueAt: addUtcCalendarMonths(new Date(), 1),
+      },
+    });
+    const payment = await prisma.payment.create({
+      data: {
+        memberId: member.id,
+        dueId: due.id,
+        method: "ONLINE",
+        amountPaise: 100000,
+        providerOrderId: `order_${marker.replaceAll("-", "")}`,
+        idempotencyKey: `race-${marker}`,
+      },
+    });
+    await expect(
+      createCoordinatorProfile(
+        user.id,
+        {
+          memberExternalId: member.externalId,
+          referralCode: `RC${marker.replaceAll("-", "").slice(0, 10)}`,
+          reason: "Synthetic capture race",
+          applyFeeExemption: true,
+          idempotencyKey: crypto.randomUUID(),
+        },
+        {
+          assertOrderUnpaid: async () => {
+            await settlePayment(payment.id, user.id, `pay_race_${marker.replaceAll("-", "")}`);
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "FEES_PENDING" });
+    expect((await prisma.due.findUniqueOrThrow({ where: { id: due.id } })).status).toBe("PAID");
+    expect(await prisma.coordinator.count({ where: { memberId: member.id } })).toBe(0);
+    expect(await prisma.receipt.count({ where: { paymentId: payment.id } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { actorId: user.id, action: "COORDINATOR_MEMBERSHIP_AND_PLAN_FEE_EXEMPTION" },
+      }),
+    ).toBe(0);
+  }, 120_000);
+
+  it("never waives pending cash or partly paid fees during appointment", async () => {
+    for (const cash of [true, false]) {
+      const { user, member, marker } = await fixture();
+      const due = await prisma.due.create({
+        data: {
+          memberId: member.id,
+          purpose: "PLAN_REGISTRATION",
+          amountPaise: 100000,
+          dueAt: addUtcCalendarMonths(new Date(), 1),
+        },
+      });
+      await prisma.payment.create({
+        data: {
+          memberId: member.id,
+          dueId: due.id,
+          method: cash ? "CASH" : "ONLINE",
+          amountPaise: 100000,
+          idempotencyKey: `held-${marker}`,
+        },
+      });
+      if (!cash)
+        await prisma.payment.create({
+          data: {
+            memberId: member.id,
+            dueId: due.id,
+            method: "WALLET",
+            status: "SUCCEEDED",
+            amountPaise: 10000,
+            idempotencyKey: `partial-${marker}`,
+          },
+        });
+      await expect(
+        createCoordinatorProfile(user.id, {
+          memberExternalId: member.externalId,
+          referralCode: `BL${marker.replaceAll("-", "").slice(0, 10)}`,
+          reason: "Synthetic blocked appointment",
+          applyFeeExemption: true,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ code: "FEES_PENDING" });
+      expect(await prisma.coordinator.count({ where: { memberId: member.id } })).toBe(0);
+      expect((await prisma.due.findUniqueOrThrow({ where: { id: due.id } })).status).toBe(
+        "PENDING",
+      );
+    }
   }, 120_000);
 });
 afterAll(async () => {

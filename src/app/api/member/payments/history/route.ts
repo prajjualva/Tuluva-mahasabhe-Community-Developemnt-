@@ -30,6 +30,9 @@ export async function GET(request: NextRequest) {
         amountPaise: payment.amountPaise,
         method: payment.method,
         status: payment.refund?.status === "SUCCEEDED" ? "REFUNDED" : payment.status,
+        feeExempted:
+          payment.due?.status === "WAIVED" &&
+          ["MEMBERSHIP", "PLAN_REGISTRATION"].includes(payment.due.purpose),
         createdAt: payment.createdAt,
         receipt: payment.receipt,
         membershipDocumentsAvailable:

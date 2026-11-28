@@ -63,6 +63,8 @@ const evidence = () =>
       memberExternalId: members[1].externalId,
       referralCode: `P11${marker.replaceAll("-", "").slice(0, 10)}`,
       reason: "Synthetic Coordinator appointment",
+      applyFeeExemption: true,
+      idempotencyKey: crypto.randomUUID(),
     });
     coordinatorIds.push(
       (

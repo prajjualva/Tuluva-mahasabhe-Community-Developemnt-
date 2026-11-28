@@ -36,6 +36,45 @@ function provider(orderBody: unknown = order, payments: unknown = { items: [capt
   };
 }
 describe("authenticated provider reconciliation", () => {
+  it("permits an exemption check only for a fully unpaid order with complete failed-attempt history", async () => {
+    const unpaid = { ...order, status: "attempted", amount_paid: 0, amount_due: 36900 };
+    const { adapter, fetcher } = provider(unpaid, {
+      count: 1,
+      items: [{ ...captured, status: "failed", captured: false }],
+    });
+    await expect(adapter.assertOrderUnpaid(order.id, 36900)).resolves.toBeUndefined();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("refuses paid, partial, or mismatched orders before an exemption", async () => {
+    for (const changed of [
+      order,
+      { ...order, status: "attempted", amount_paid: 100, amount_due: 36800 },
+      { ...order, status: "created", amount_paid: 0, amount_due: 36900, currency: "USD" },
+    ])
+      await expect(
+        provider(changed, { count: 0, items: [] }).adapter.assertOrderUnpaid(order.id, 36900),
+      ).rejects.toThrow();
+  });
+  it.each(["authorized", "captured", "created", "refunded"])(
+    "refuses a %s attempt even when the order claims to be unpaid",
+    async (status) => {
+      const unpaid = { ...order, status: "attempted", amount_paid: 0, amount_due: 36900 };
+      await expect(
+        provider(unpaid, {
+          count: 1,
+          items: [{ ...captured, captured: false, status }],
+        }).adapter.assertOrderUnpaid(order.id, 36900),
+      ).rejects.toThrow();
+    },
+  );
+  it("refuses an incomplete payment collection", async () => {
+    await expect(
+      provider(
+        { ...order, status: "created", amount_paid: 0, amount_due: 36900 },
+        { count: 1, items: [] },
+      ).adapter.assertOrderUnpaid(order.id, 36900),
+    ).rejects.toThrow("complete order history");
+  });
   it("requires a fully paid order and an exact captured, unrefunded INR payment", async () => {
     const { adapter, fetcher } = provider(order, {
       items: [{ ...captured, id: "pay_failed", captured: false, status: "failed" }, captured],
