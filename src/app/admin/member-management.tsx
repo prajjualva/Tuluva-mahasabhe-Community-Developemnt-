@@ -238,39 +238,28 @@ export function AdminMemberManagement() {
         <p>{total} members found</p>
       )}
       {!loading && !unavailable && !members.length && <p>No members match these filters.</p>}
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Member</th>
-              <th>Status / Coordinator</th>
-              <th>Profile</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((member) => (
-              <tr key={member.externalId}>
-                <td>
-                  {member.fullName}
-                  <br />
-                  {member.user.email}
-                  <br />
-                  {member.user.mobile}
-                </td>
-                <td>
-                  {member.status}
-                  <br />
-                  {member.coordinator?.member.fullName ?? "Foundation Admin"}
-                </td>
-                <td>
-                  <button disabled={busy} onClick={() => void open(member.externalId)}>
-                    Open member
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="member-directory" role="list" aria-label="Members found">
+        {members.map((member) => (
+          <article className="member-directory-card" role="listitem" key={member.externalId}>
+            <div>
+              <h3>{member.fullName}</h3>
+              <p>
+                {member.user.email}
+                <br />
+                {member.user.mobile}
+              </p>
+            </div>
+            <div className="member-record-meta">
+              <span className="member-record-status" data-status={member.status}>
+                {recordStatusLabel(member.status)}
+              </span>
+              <span>Coordinator: {member.coordinator?.member.fullName ?? "Foundation Admin"}</span>
+            </div>
+            <button disabled={busy} onClick={() => void open(member.externalId)}>
+              Open member
+            </button>
+          </article>
+        ))}
       </div>
       <button
         disabled={busy || loading || unavailable || page === 1}

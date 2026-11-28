@@ -632,6 +632,35 @@ button.notification-open:hover {
   gap: 16px;
   margin-bottom: 18px;
 }
+.member-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.member-directory .member-directory-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  margin: 0;
+  min-width: 0;
+  box-shadow: none;
+}
+.member-directory-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+.member-directory-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.member-directory-card .member-record-meta {
+  margin: 0;
+}
+.member-directory-card > button {
+  justify-self: start;
+}
 .admin-member-profile .member-profile-heading h3 {
   margin: 6px 0 12px;
   font-size: 1.4rem;
